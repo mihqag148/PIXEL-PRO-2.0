@@ -61,6 +61,16 @@ public:
     digitalWrite(Pins::cs,HIGH);
   }
 
+  void drawRgb332(int16_t x,int16_t y,const uint8_t* src,uint16_t w,uint16_t h) {
+    if(!src||!w||!h||x<0||y<0||x+w>480||y+h>320)return;
+    writeWindow(x,y,w,h);
+    for(uint32_t i=0;i<uint32_t(w)*h;i++) {
+      uint16_t color=rgb332(src[i]);
+      bus(color>>8);bus(color);
+    }
+    digitalWrite(Pins::cs,HIGH);
+  }
+
   // Media frames are stored as 160x106 RGB332. Scale 3x while streaming the
   // frame so no full 480x320 framebuffer is required.
   void drawRgb332Scaled3(const uint8_t* src,uint16_t w,uint16_t h) {
