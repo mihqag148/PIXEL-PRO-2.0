@@ -2,7 +2,7 @@
 
 Firmware ESP32-S2 + app Windows mới, được phát triển độc lập cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B 480×320** của người dùng.
 
-**2.0.1 — sửa hướng hiển thị và ổn định LCD:** mặc định xoay 180° so với 2.0.0; Studio có tùy chọn hướng/lật ngang. Phục hồi init tối giản của HX8357-B, tăng khoảng ổn định bus, giữ nguyên pinout và keymap. Với Flash Download Tool: merged tại **0x0**, app-only tại **0x10000**; xem hướng dẫn bên dưới. Các thay đổi phần cứng vẫn cần người dùng xác nhận sau nạp.
+**2.0.1 — sửa hướng hiển thị và ổn định LCD:** mặc định xoay 180° so với 2.0.0; Studio có tùy chọn hướng/lật ngang. Phục hồi init tối giản của HX8357-B, tăng khoảng ổn định bus, giữ nguyên pinout và cấu trúc keymap. Với Flash Download Tool: merged tại **0x0**, app-only tại **0x10000**; merged có thể reset NVS, xem hướng dẫn bên dưới. Các thay đổi phần cứng vẫn cần người dùng xác nhận sau nạp.
 
 ## Tải và sử dụng
 

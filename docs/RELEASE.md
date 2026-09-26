@@ -4,7 +4,7 @@
 - Studio 2.0.1 cho chọn hướng/lật ngang, lưu trên thiết bị và chuyển tọa độ touch đồng bộ.
 - Bỏ bảng power/VCOM/gamma ép thêm; dùng trình tự init tối giản theo driver HX8357-B hiện tại của repo cũ (chỉ đọc tham khảo).
 - Thêm setup/WR-low/hold cho bus i8080 và thời gian ổn định sau reset.
-- Giữ pinout, partition và keymap đã lưu. App mới nhận firmware 2.0.x.
+- Giữ pinout, partition và cấu trúc keymap. App-only giữ NVS; ảnh merged có thể reset cấu hình nên xuất preset trước nếu còn kết nối được. App mới nhận firmware 2.0.x.
 
 ### Flash Download Tool
 

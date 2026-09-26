@@ -10,6 +10,8 @@ Chọn **ESP32-S2**, chế độ **SPI Download**. Đối với bản đầy đ�
 
 Chỉ tick dòng này; bỏ tick các file khác. Chọn **DIO**, **40 MHz**, **4 MB**, cổng COM ROM download đúng của ESP32-S2 rồi START. Khi FINISH, nhấn RESET hoặc rút/cắm lại USB để thoát bootloader. Không cần thay đổi dây màn hình.
 
+Ảnh merged chứa cả các khoảng trống giữa bootloader/partition/app, nên nạp đầy đủ có thể xóa cấu hình NVS. Xuất preset từ Studio trước nếu thiết bị còn kết nối được. App-only giữ nguyên vùng NVS khi đã có bootloader và partition v2 đúng.
+
 Nếu chỉ cập nhật app trên thiết bị đã có partition v2, chọn duy nhất `PIXEL_PRO_2_app.bin` tại **0x010000**. Không dùng cùng offset cho hai loại file và không tick cả merged lẫn app. Merged nạp ở địa chỉ của app có thể không khởi động, để lại LCD trắng; không thể kết luận đây là nguyên nhân nếu chưa kiểm tra offset thực tế.
 
 ## esptool (cách khác)

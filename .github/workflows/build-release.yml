@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: pixel-pro-2-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   firmware:
     runs-on: ubuntu-latest
