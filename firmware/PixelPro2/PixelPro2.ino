@@ -10,7 +10,7 @@
 #include "Model.h"
 #include "Panel.h"
 
-USBCDC link;
+USBCDC usbLink;
 USBHIDKeyboard keyboard;
 USBHIDConsumerControl media;
 Preferences prefs;
@@ -30,7 +30,7 @@ Pixel::LineBuffer<192> input;
 bool displayDirty=true,sdReady=false;
 uint8_t dirtyTiles=255;
 uint32_t lastScan=0,lastTouch=0,lastInput=0;
-bool touchDown=false;
+Pixel::Debounce touch;
 uint16_t consumerHeld=0;
 uint32_t consumerUntil=0;
 
@@ -49,7 +49,7 @@ void loadConfig() {
   for(auto& page:saved.bindings)for(auto& b:page)if(!Pixel::valid(b))return;
   config=saved;
 }
-void emit(const String& text) {if(link)link.println(text);}
+void emit(const String& text) {if(usbLink)usbLink.println(text);}
 void reportKeys() {
   KeyReport report{};int count=0;
   for(int i=0;i<8;++i)if(keys[i].stable&&!suppressed[i]&&held[i].type=='K') {
@@ -107,24 +107,25 @@ void scanTouch(uint32_t now) {
   digitalWrite(Pins::cs,HIGH);
   pinMode(yp,INPUT);pinMode(ym,INPUT);
   pinMode(xp,OUTPUT);digitalWrite(xp,HIGH);pinMode(xm,OUTPUT);digitalWrite(xm,LOW);
-  delayMicroseconds(30);int rx=analogRead(yp);
+  delayMicroseconds(30);int rx=1023-analogRead(yp);
   pinMode(xp,INPUT);pinMode(xm,INPUT);
   pinMode(yp,OUTPUT);digitalWrite(yp,HIGH);pinMode(ym,OUTPUT);digitalWrite(ym,LOW);
-  delayMicroseconds(30);int ry=analogRead(xm);
+  delayMicroseconds(30);int ry=1023-analogRead(xm);
   pinMode(xp,OUTPUT);digitalWrite(xp,LOW);pinMode(ym,OUTPUT);digitalWrite(ym,HIGH);
   pinMode(xm,INPUT);pinMode(yp,INPUT);delayMicroseconds(30);
   int z1=analogRead(xm),z2=analogRead(yp);
   panel.restore();
-  int pressure=1023-abs(z2-z1);
+  // Resistance estimate for the measured 300-ohm X plate. Accept the two
+  // divider polarities found on MCUFRIEND-compatible shields.
+  int pressure=z1>0?int((int64_t(abs(z2-z1))*rx*300)/(z1*1024)):0;
   bool down=pressure>=200&&pressure<=1000&&rx>=100&&rx<=970&&ry>=100&&ry<=970;
-  if(down&&!touchDown) {
+  if(touch.update(down,now)&&touch.stable) {
     int x=constrain(map(ry,942,139,0,479),0,479);
     int y=constrain(map(rx,136,907,0,319),0,319);
     // Touch is navigation only: avoids stray touches typing on the PC.
     if(y>=280)selectProfile(constrain(x/96,0,4));
     emit("E|TOUCH|"+String(x)+"|"+String(y));
   }
-  touchDown=down;
 }
 void render() {
   if(displayDirty) {
@@ -185,7 +186,7 @@ void request(char* line) {
 }
 void setup() {
   USB.productName("PIXEL PRO 2.0");USB.manufacturerName("PIXEL PRO");
-  keyboard.begin();media.begin();link.begin();USB.begin();
+  keyboard.begin();media.begin();usbLink.begin();USB.begin();
   // Enumeration must never wait for the app or an open serial port.
   prefs.begin("pixelpro2",false);loadConfig();
   for(auto p:Pins::rows)pinMode(p,INPUT);
@@ -200,8 +201,8 @@ void loop() {
   uint32_t now=millis();scanKeys(now);
   if(consumerHeld&&int32_t(now-consumerUntil)>=0){media.release();consumerHeld=0;}
   // Bounded work: a stream of serial data cannot starve physical inputs.
-  for(int count=0;count<192&&link.available();++count) {
-    int status=input.feed(char(link.read()));
+  for(int count=0;count<192&&usbLink.available();++count) {
+    int status=input.feed(char(usbLink.read()));
     if(status==1)request(input.text);else if(status<0)emit("R|0|ERR|FRAME");
   }
   scanTouch(now);render();delay(1);

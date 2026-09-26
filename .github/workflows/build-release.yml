@@ -34,7 +34,7 @@ jobs:
             test "$attempt" != 3 || exit 1
             sleep 10
           done
-          arduino-cli lib install 'Adafruit GFX Library@1.11.11' 'Adafruit NeoPixel@1.15.5'
+          arduino-cli lib install 'Adafruit BusIO@1.17.4' 'Adafruit GFX Library@1.11.11' 'Adafruit NeoPixel@1.15.5'
       - name: Compile actual ESP32-S2 firmware
         run: >-
           arduino-cli compile
@@ -61,6 +61,8 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Test app protocol and presets
         run: dotnet run --project tests/AppTests/AppTests.csproj -c Release
+      - name: Smoke test actual Studio window
+        run: dotnet run --project tests/UiSmoke/UiSmoke.csproj -c Release -- studio-preview.png
       - name: Publish self-contained Windows Studio
         run: dotnet publish app/PixelPro2/PixelPro2.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -o dist/studio
       - name: Package app
