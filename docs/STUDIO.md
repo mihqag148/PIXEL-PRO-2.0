@@ -1,37 +1,57 @@
-# Studio Windows
+# Studio Windows 2.1
 
-Studio **2.0.1** thêm ô hướng màn hình và nút **Áp dụng hướng**: xoay 180° (mặc định mới), hướng 2.0.0 hoặc lật ngang. Lựa chọn được lưu ngay trên thiết bị, không ghi đè keymap; cảm ứng chuyển cùng hướng. Cần firmware 2.0.1 trở lên cho chức năng này.
+Studio 2.1 is the desktop configurator/background host for PIXEL PRO 2.0.
 
-Chọn cổng COM và **Kết nối**. App xác minh handshake PIXELPRO2 trước khi gửi cấu hình. Kết nối không tự ghi đè thiết bị hoặc bản nháp trên PC.
+## Kết nối
 
-- **Đọc thiết bị**: đọc đủ 40 binding rồi thay bản nháp. Nội dung macro vẫn giữ ở PC vì thiết bị chỉ lưu hành động H.
-- Chọn profile và ô K1…K8. Nhãn LCD dùng ASCII tối đa 12 ký tự. Chọn loại hành động và mã theo chú giải ngay trong app.
-- **Gửi & lưu**: gửi 5 profile, chờ ACK từng lệnh, lưu NVS và chọn profile. Nếu bị ngắt giữa chừng, app báo lỗi; một phần cấu hình RAM có thể đã đổi nhưng chưa SAVE. Kết nối và gửi lại toàn bộ.
-- **Nhập/Xuất preset**: JSON schema 2, chứa 5×8 binding và macro. Nhập không tự chạy macro hay gửi xuống thiết bị.
-- Bản nháp tự lưu ở `%LOCALAPPDATA%\PixelPro2\preset.json` khi thoát hoặc lưu bản nháp.
-- **Thu vào khay** giữ app chạy. Nhấp đúp icon khay để mở lại. Đóng cửa sổ bằng X sẽ thoát.
+- **Tự tìm phím** quét các COM hiện có, mở từng cổng với DTR+RTS, retry HELLO và chỉ giữ cổng trả về đúng `PIXELPRO2`.
+- Firmware tắt native-USBCDC reboot-by-line-state để việc mở/đóng Studio không đá ESP32-S2 vào bootloader.
+- Có thể chọn COM thủ công bằng **Kết nối**.
+- Mất COM sẽ tắt quyền chạy macro host và ghi lỗi vào log.
 
-## Phím HID (K)
+## Keymap / profile
 
-Mã theo USB keyboard usage: A=4, B=5…Z=29, 1=30…0=39, Enter=40, Escape=41, Tab=43, Space=44, F1=58…F12=69.
-Modifier: Ctrl=1, Shift=2, Alt=4, Win=8, phải Ctrl=16, Shift=32, Alt=64, Win=128. Cộng bit khi kết hợp. Ví dụ Copy: K, code=6, modifier=1. Hoạt động không cần Studio. Tối đa 6 phím HID khác nhau giữ cùng lúc.
+- 5 profile × 8 key.
+- K = keyboard HID; C = media HID; H = macro chạy qua Studio; P = chuyển profile; D = disabled.
+- Nhãn tối đa 12 ASCII, RGB565 từng phím, brightness 0…80.
+- **Đọc thiết bị** đọc đủ 40 binding.
+- **Gửi & lưu** gửi đủ 40 binding + RGB + saver timeout, sau đó SAVE.
+- Preset JSON schema 2 lưu tại file tùy chọn và bản nháp local `%LOCALAPPDATA%\PixelPro2\preset.json`.
 
-Media (C): volume+=233, volume−=234, mute=226, play/pause=205, next=181, previous=182, stop=183. Modifier=0.
-Profile (P): code=0…4, modifier=0. Disabled (D) và Host (H): code=0, modifier=0.
+## Macro host
 
-## Macro PC (H)
-
-Mỗi dòng một bước. Ví dụ:
+Mỗi dòng là một step:
 
 ```text
-Shortcut|CTRL+L
-Text|https://example.com
-Shortcut|ENTER
+Open|C:\Tools\app.exe
 Delay|500
+Shortcut|CTRL+SHIFT+S
+Text|hello
+MouseMove|20,-10
+MouseClick|LEFT
+Wheel|-120
+KeyDown|CTRL
+KeyUp|CTRL
 ```
 
-Các loại: Text (Unicode), Shortcut (CTRL/SHIFT/ALT/WIN, A–Z, 0–9, F1–F24, ENTER/ESC/SPACE/TAB/LEFT/RIGHT/UP/DOWN/DELETE/BACKSPACE), Open (URL http/https hoặc đường dẫn đầy đủ), Delay (0…10000 ms). Tối đa 32 bước, mỗi giá trị tối đa 4096 ký tự, không hỗ trợ xuống dòng trong một bước.
+Supported: Text, Shortcut, Open (URL/app/file/folder), Delay 0…30000ms, MouseMove, MouseClick LEFT/RIGHT/MIDDLE/DOUBLELEFT, Wheel, KeyDown, KeyUp. Tối đa 64 step. Held keys are released in `finally` if a macro is interrupted.
 
-Bật **Cho phép macro trên PC này** sau khi xem nội dung. Tùy chọn này không được lưu và tự tắt khi kết nối lại, nhập preset hoặc gửi cấu hình. Macro gửi vào cửa sổ đang có focus; thu Studio vào khay rồi chọn cửa sổ đích. Không chạy được vào app có quyền cao hơn. Các yêu cầu trong lúc một macro đang chạy được bỏ qua để tránh chồng phím.
+H actions require Studio running and **Cho phép macro trên PC này** enabled. K/C actions remain native HID and do not need Studio.
 
-Các phím K/C chạy trực tiếp trên thiết bị; macro H chỉ chạy khi app còn mở, đúng preset PC và được cho phép. Profile đổi trên thiết bị được ghi vào log; profile editor không tự thay đổi để tránh mất nội dung đang soạn.
+## Touch
+
+**Calibrate touch** starts an on-device four-point wizard. Touch the crosshairs in this order: top-left, top-right, bottom-right, bottom-left. Firmware validates spans, stores raw endpoints in NVS, restores current orientation and applies the same transform to touch coordinates.
+
+## GIF screensaver
+
+**Tải GIF** decodes on the PC, scales to 160×106 RGB332 and downsamples frame count only if necessary to stay under the flash budget. Transfer uses 512-byte cumulative ACK + CRC32. Firmware stores `/screensaver.pxg` and scales each RGB332 frame 3× to the 480×320 panel without a full-size framebuffer.
+
+**Saver(s)** controls idle time; 0 disables the saver. Key/touch/encoder/host activity exits the saver.
+
+## Icon phím
+
+Select a profile and K1…K8, then choose **Tải icon phím**. PNG/JPG/BMP/GIF are fitted into a 48×48 RGB332 icon and uploaded with the same ACK/CRC transport. Icons are stored in flash per profile/key and render directly in the physical key tile. **Xóa icon phím** restores the text-only tile.
+
+## Display
+
+Orientation 0…3 is persisted separately from keymap. RGB, touch, media and key icons are designed for MCUFRIEND/HX8357-B 480×320 on the existing PIXEL PRO 2.0 pinout.

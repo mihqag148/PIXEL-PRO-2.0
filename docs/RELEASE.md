@@ -1,17 +1,22 @@
-## 2.0.1 — Sửa hướng hiển thị, tăng độ ổn định LCD
+## 2.1.0 — COM fix + eezbotfun-style feature expansion
 
-- Mặc định xoay 180° so với 2.0.0 để xử lý hướng hiển thị người dùng đã báo.
-- Studio 2.0.1 cho chọn hướng/lật ngang, lưu trên thiết bị và chuyển tọa độ touch đồng bộ.
-- Bỏ bảng power/VCOM/gamma ép thêm; dùng trình tự init tối giản theo driver HX8357-B hiện tại của repo cũ (chỉ đọc tham khảo).
-- Thêm setup/WR-low/hold cho bus i8080 và thời gian ổn định sau reset.
-- Giữ pinout, partition và cấu trúc keymap. App-only giữ NVS; ảnh merged có thể reset cấu hình nên xuất preset trước nếu còn kết nối được. App mới nhận firmware 2.0.x.
+- **Fix lỗi Studio không kết nối COM:** Arduino-ESP32 native `USBCDC` only reports connected when DTR+RTS are asserted. Studio now uses the correct line state, retries HELLO, and can auto-probe COM ports. Firmware calls `enableReboot(false)` so line-state changes do not trigger bootloader reboot.
+- Expanded host macros: Unicode text, shortcuts, app/file/folder/URL launch, delay, mouse move/click/wheel, KeyDown/KeyUp.
+- Four-point touch calibration with NVS persistence and orientation-aware coordinate transform.
+- GIF screensaver pipeline: PC-side GIF decode/scale → RGB332 160×106 → 512-byte ACK/CRC transfer → SPIFFS → direct HX8357-B playback.
+- Custom per-key icons: image → RGB332 48×48 → ACK/CRC transfer → per-profile/per-key SPIFFS asset → physical tile rendering.
+- Saver timeout control, media status/delete, improved device status/logging and Studio auto-connect.
+- Existing 5×8 keymap, HID/media, RGB, SD, orientation and pinout remain intact.
+- Workflow builds real ESP32-S2 firmware and a self-contained Windows x64 Studio; release is created only after both jobs are green.
 
-### Flash Download Tool
+### Flash
 
-**Chỉ chọn PIXEL_PRO_2_merged.bin và nhập địa chỉ 0x000000.** Chọn ESP32-S2, SPI Download, DIO, 40 MHz, 4 MB. Sau FINISH, nhấn RESET/rút cắm lại USB.
+For Flash Download Tool use **PIXEL_PRO_2_merged.bin at 0x000000** (ESP32-S2, DIO, 40 MHz, 4 MB). App-only `PIXEL_PRO_2_app.bin` remains at **0x010000** for an existing v2 partition layout.
 
-App-only: chọn duy nhất PIXEL_PRO_2_app.bin tại **0x010000**, chỉ với partition v2 đã có. Không dùng cùng offset cho merged và app. Nạp merged vào offset app có thể khiến firmware không boot và LCD trắng; offset lần nạp bị lỗi của người dùng chưa được xác nhận.
+Full merged flash can reset NVS and SPIFFS, so it can clear saved bindings, touch calibration, GIF and icons. Studio preset JSON can be exported separately.
 
-Tải firmware ZIP để có hướng dẫn và script kiểm tra checksum/nạp đúng offset. Tải Studio Windows mới cùng bản; Studio 2.0.0 không chấp nhận firmware 2.0.1.
+### Compatibility / provenance
 
-Build và kiểm thử phần mềm được CI kiểm tra trước phát hành. **Chưa xác nhận hết lỗi trên thiết bị vật lý của người dùng.**
+The user workflow and feature organization were compared with the MIT-licensed `eezbotfun/8-key-macropad` project. PIXEL PRO 2.0 keeps its own protocol and implementation tailored to the user's ESP32-S2 + MCUFRIEND/HX8357-B hardware; no upstream binaries or branded assets are redistributed.
+
+CI confirms source build/test integrity. LCD color/timing, resistive-touch raw ranges and physical USB behavior still need confirmation on the actual unit after flashing.

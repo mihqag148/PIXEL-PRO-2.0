@@ -1,34 +1,47 @@
 # PIXEL PRO 2.0
 
-Firmware ESP32-S2 + app Windows mới, được phát triển độc lập cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B 480×320** của người dùng.
+Firmware ESP32-S2 + Studio Windows cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B 480×320**. Repo này là nhánh độc lập; mọi build/release của dự án này chỉ thuộc **PIXEL-PRO-2.0**.
 
-**2.0.1 — sửa hướng hiển thị và ổn định LCD:** mặc định xoay 180° so với 2.0.0; Studio có tùy chọn hướng/lật ngang. Phục hồi init tối giản của HX8357-B, tăng khoảng ổn định bus, giữ nguyên pinout và cấu trúc keymap. Với Flash Download Tool: merged tại **0x0**, app-only tại **0x10000**; merged có thể reset NVS, xem hướng dẫn bên dưới. Các thay đổi phần cứng vẫn cần người dùng xác nhận sau nạp.
+## 2.1.0 — eezbotfun-style workflow adapted for PIXEL PRO hardware
+
+- Sửa kết nối COM native USB CDC: Studio assert DTR+RTS đúng yêu cầu của Arduino-ESP32, firmware tắt reboot theo line-state và Studio tự dò/retry cổng.
+- 8 phím × 5 profile, HID keyboard/media chạy độc lập không cần Studio; host action chạy khi Studio ở nền.
+- Macro host: text Unicode, shortcut, mở app/file/URL, delay, mouse move/click/wheel, KeyDown/KeyUp.
+- Touch calibration 4 điểm lưu NVS; hướng/lật màn hình và touch dùng chung transform.
+- GIF screensaver: Studio chuyển GIF thành RGB332 160×106, giữ thời lượng hợp lý, truyền raw 512-byte có ACK/CRC, lưu SPIFFS và phát trực tiếp lên HX8357-B.
+- Icon tùy chỉnh từng phím: Studio chuyển ảnh về 48×48 RGB332, truyền có ACK/CRC, lưu flash và hiển thị trực tiếp trong tile.
+- RGB per-key, brightness, profile strip, SD detect, import/export preset, tray mode.
+- Pinout HX8357-B/i8080 và toàn bộ phần cứng hiện có được giữ nguyên.
+
+Kiến trúc và cách vận hành tham khảo dự án MIT [eezbotfun/8-key-macropad](https://github.com/eezbotfun/8-key-macropad), nhưng protocol và implementation của PIXEL PRO 2.0 được viết riêng cho ESP32-S2 + HX8357-B; không yêu cầu firmware nhị phân hay assets của eezbotfun.
 
 ## Tải và sử dụng
 
 Tải firmware và Studio tại [GitHub Releases](https://github.com/mihqag148/PIXEL-PRO-2.0/releases).
-Xem [hướng dẫn nạp](docs/FLASH.md), [pinout](docs/HARDWARE.md) và [hướng dẫn app](docs/STUDIO.md).
+Xem [hướng dẫn nạp](docs/FLASH.md), [pinout](docs/HARDWARE.md), [protocol](docs/PROTOCOL.md) và [Studio](docs/STUDIO.md).
 
-- 8 phím ma trận 2×4, 5 profile lưu trên thiết bị; nhãn ASCII và màu riêng từng phím.
-- USB HID keyboard/consumer hoạt động khi không mở app; roller tăng/giảm âm lượng và nhấn mute.
-- App Windows x64 quản lý profile, RGB, nhập/xuất preset JSON và chạy chuỗi macro (text Unicode, shortcut, mở ứng dụng/file/URL, delay).
-- LCD HX8357-B i8080 8-bit; cảm ứng vùng chân màn hình chuyển profile.
-- Native USB CDC có request ID, giới hạn kích thước và ACK. Không chờ app khi khởi động.
-- Thẻ microSD tùy chọn được nhận diện; D17/D18 giữ dành riêng cho bus mở rộng.
+### Flash Download Tool
 
-Kiến trúc HID độc lập + app thực thi tác vụ PC tham khảo cách vận hành công khai của [eezbotfun](https://github.com/eezbotfun/8-key-macropad). Không sử dụng firmware nhị phân, mã nguồn hoặc tài sản độc quyền của họ. Không phải firmware tương thích giao thức eezbotfun/LumiPad.
+- Full image: **PIXEL_PRO_2_merged.bin** tại **0x000000**.
+- App-only: **PIXEL_PRO_2_app.bin** tại **0x010000**, chỉ khi partition v2 đã tồn tại.
+- ESP32-S2, DIO, 40 MHz, 4 MB.
+- Full image có thể reset NVS; preset PC nên được xuất trước nếu cần giữ cấu hình.
 
-## Phạm vi bản 2.0.0
+## Hardware
 
-Đây là bản nền tảng mới, không phải bản sao toàn bộ tính năng PIXEL-PRO cũ. Chưa có GIF/background, ảnh icon tùy chỉnh, USB MSC, cập nhật OTA, tự đổi profile theo ứng dụng, hoặc điều khiển module PCA9546A. ESP32-S2 không có Bluetooth. Macro PC cần mở Studio (có thể thu vào khay) và bật cho phép macro. Nhãn LCD dùng ASCII tối đa 12 ký tự; macro text hỗ trợ Unicode.
+- LCD MCUFRIEND/HX8357-B 480×320, bus i8080 8-bit.
+- 8 phím ma trận 2×4.
+- WS2812 per-key RGB.
+- Encoder/roller volume + mute.
+- Touch resistive dùng chung một số line với shield.
+- microSD tùy chọn.
+- D17/D18 giữ dành cho bus mở rộng.
 
-Pinout và các thanh ghi panel lấy từ tài liệu/lịch sử phần cứng repo cũ ở commit `8086533652f131a41edf0c38a80da5b109643350`, chỉ đọc để tham khảo. Mọi thay đổi và release thuộc duy nhất repo này.
-
-CI build firmware thật, publish app Windows tự chứa .NET, chạy kiểm thử và kiểm tra partition/asset trước khi phát hành. CI xanh không thay thế kiểm tra trực tiếp màn hình, cảm ứng, timing bus và USB trên thiết bị người dùng. Xem [kiểm thử](docs/VALIDATION.md).
+Không thay đổi dây so với pinout hiện tại của PIXEL PRO 2.0.
 
 ## Build
 
-Firmware: Arduino CLI 1.5.1, Arduino-ESP32 3.3.12, Adafruit GFX 1.11.11, Adafruit NeoPixel 1.15.5. Xem workflow để cài thư viện và chọn FQBN chính xác.
+Firmware: Arduino CLI 1.5.1, Arduino-ESP32 3.3.12, Adafruit GFX 1.11.11, Adafruit NeoPixel 1.15.5.
 
 ```sh
 arduino-cli compile --fqbn 'esp32:esp32:esp32s2:PSRAM=enabled,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,FlashMode=dio' --output-dir build/raw firmware/PixelPro2
@@ -37,4 +50,4 @@ dotnet publish app/PixelPro2/PixelPro2.csproj -c Release -r win-x64 --self-conta
 g++ -std=c++17 -Wall -Wextra -Werror tests/model_test.cpp -o build/model-test
 ```
 
-Phát hành từ `main` chỉ sau khi cả job firmware và app thành công. Tag `v<VERSION>` không bị ghi đè.
+CI chỉ tạo tag/release mới khi firmware thật và Studio đều build/test thành công. CI xanh xác nhận build phần mềm, không thay thế kiểm tra trực tiếp timing LCD/touch/USB trên thiết bị vật lý.
