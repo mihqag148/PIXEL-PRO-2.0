@@ -6,3 +6,4 @@ dist/
 *.user
 publish-tree.json
 studio-preview.png
+__pycache__/

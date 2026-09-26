@@ -21,6 +21,7 @@ jobs:
           mkdir -p build
           g++ -std=c++17 -Wall -Wextra -Werror tests/model_test.cpp -o build/model-test
           build/model-test
+          python -m unittest discover -s tests -p 'test_*.py'
       - uses: arduino/setup-arduino-cli@v2
         with:
           version: 1.5.1

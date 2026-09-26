@@ -12,6 +12,10 @@ ASCII newline framing; optional CR before LF. Host sends `id|COMMAND|...` with i
 | RGB\|0…80 | RGB |
 | SAVE | SAVED after successful NVS write |
 | SDINFO | ABSENT or READY followed by card MiB |
+| PANEL (2.0.1+) | orientation mode 0…3 |
+| DISPLAY\|mode (2.0.1+) | DISPLAY after applying and persisting orientation |
+
+Display modes: 0=2.0.0 orientation; 1=180-degree rotation (new default); 2=horizontal mirror of mode 0; 3=horizontal mirror of mode 1. Touch coordinates follow the same transform. Orientation is stored separately from the existing binding blob, so upgrading retains bindings. Studio 2.0.1 accepts 2.0.x HELLO versions; older Studio 2.0.0 requires an update for newer firmware.
 
 `SET` modifies RAM, `SAVE` persists all bindings/brightness in one NVS blob. Profile selection is session-only, startup is P1. On profile change all HID keys are released; held physical keys remain suppressed until released. On keymap edits held keys retain their original binding until release.
 

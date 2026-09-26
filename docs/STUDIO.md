@@ -1,5 +1,7 @@
 # Studio Windows
 
+Studio **2.0.1** thêm ô hướng màn hình và nút **Áp dụng hướng**: xoay 180° (mặc định mới), hướng 2.0.0 hoặc lật ngang. Lựa chọn được lưu ngay trên thiết bị, không ghi đè keymap; cảm ứng chuyển cùng hướng. Cần firmware 2.0.1 trở lên cho chức năng này.
+
 Chọn cổng COM và **Kết nối**. App xác minh handshake PIXELPRO2 trước khi gửi cấu hình. Kết nối không tự ghi đè thiết bị hoặc bản nháp trên PC.
 
 - **Đọc thiết bị**: đọc đủ 40 binding rồi thay bản nháp. Nội dung macro vẫn giữ ở PC vì thiết bị chỉ lưu hành động H.

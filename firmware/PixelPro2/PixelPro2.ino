@@ -23,6 +23,7 @@ struct Configuration {
 };
 Configuration config{};
 uint8_t profile=0;
+uint8_t displayMode=1; // Correct the user's reported 180-degree rotation.
 Pixel::Debounce keys[8],push;
 bool suppressed[8]{};
 Pixel::Binding held[8]{};
@@ -122,6 +123,7 @@ void scanTouch(uint32_t now) {
   if(touch.update(down,now)&&touch.stable) {
     int x=constrain(map(ry,942,139,0,479),0,479);
     int y=constrain(map(rx,136,907,0,319),0,319);
+    Pixel::orientTouch(displayMode,x,y);
     // Touch is navigation only: avoids stray touches typing on the PC.
     if(y>=280)selectProfile(constrain(x/96,0,4));
     emit("E|TOUCH|"+String(x)+"|"+String(y));
@@ -163,7 +165,13 @@ void request(char* line) {
   auto ok=[&](const String& s){emit(prefix+"OK|"+s);};
   auto error=[&](const char* s){emit(prefix+"ERR|"+s);};
   String cmd=tokens[1];uint32_t p=0,k=0,v=0,m=0,color=0;
-  if(cmd=="HELLO"&&n==2){ok("PIXELPRO2|2.0.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,SD");return;}
+  if(cmd=="HELLO"&&n==2){ok("PIXELPRO2|2.0.1|5|8|HX8357B|HID,CDC,RGB,TOUCH,SD,PANEL");return;}
+  if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
+  if(cmd=="DISPLAY"&&n==3&&Pixel::number(tokens[2],3,v)) {
+    if(prefs.putUChar("orientation",v)!=1){error("STORAGE");return;}
+    displayMode=v;panel.orientation(displayMode);displayDirty=true;dirtyTiles=255;
+    ok("DISPLAY");return;
+  }
   if(cmd=="STATE"&&n==2){ok(String(profile)+"|"+String(config.brightness));return;}
   if(cmd=="PROFILE"&&n==3&&Pixel::number(tokens[2],4,p)){selectProfile(p);ok("PROFILE");return;}
   if(cmd=="GET"&&n==4&&Pixel::number(tokens[2],4,p)&&Pixel::number(tokens[3],7,k)) {
@@ -189,11 +197,12 @@ void setup() {
   keyboard.begin();media.begin();usbLink.begin();USB.begin();
   // Enumeration must never wait for the app or an open serial port.
   prefs.begin("pixelpro2",false);loadConfig();
+  displayMode=prefs.getUChar("orientation",1);if(displayMode>3)displayMode=1;
   for(auto p:Pins::rows)pinMode(p,INPUT);
   for(auto p:Pins::cols)pinMode(p,INPUT_PULLUP);
   pinMode(Pins::encoderA,INPUT_PULLUP);pinMode(Pins::encoderB,INPUT_PULLUP);pinMode(Pins::encoderPush,INPUT_PULLUP);
   analogReadResolution(10);
-  leds.begin();leds.clear();leds.show();panel.begin();
+  leds.begin();leds.clear();leds.show();panel.begin(displayMode);
   SPI.begin(Pins::sdSck,Pins::sdMiso,Pins::sdMosi,Pins::sdCs);
   sdReady=SD.begin(Pins::sdCs,SPI,20000000);
 }

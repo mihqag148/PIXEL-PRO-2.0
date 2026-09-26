@@ -38,10 +38,19 @@ subprocess.run([sys.executable,'-m','esptool','--chip','esp32s2','merge-bin','-o
     '0x1000',str(out/'PIXEL_PRO_2_bootloader.bin'),'0x8000',str(out/'PIXEL_PRO_2_partitions.bin'),
     '0xe000',str(out/'boot_app0.bin'),'0x10000',str(out/'PIXEL_PRO_2_app.bin')],check=True)
 image=merged.read_bytes()
+assert image[0x1000] == 0xE9, 'Missing ESP32-S2 bootloader at 0x1000'
+assert image[0x8000:0x8000+len(data)] == data, 'Partition table offset mismatch'
 assert image[0x10000:0x10000+app.stat().st_size] == app.read_bytes()
 for name in ['FLASH.md','HARDWARE.md','PROTOCOL.md','VALIDATION.md']:
     shutil.copyfile(Path('docs')/name,out/name)
 shutil.copyfile('THIRD_PARTY.md',out/'THIRD_PARTY.md')
+shutil.copyfile('tools/flash_firmware.py',out/'flash_firmware.py')
+(out/'FLASH-OFFSETS.txt').write_text(
+    'ESP32-S2 / Flash Download Tool\n'
+    'FULL INSTALL: select ONLY PIXEL_PRO_2_merged.bin at 0x000000\n'
+    'APP UPDATE: select ONLY PIXEL_PRO_2_app.bin at 0x010000 (existing v2 partition only)\n'
+    'Never flash the merged image at 0x10000. Do not select both images.\n'
+    'Use SPI Download, DIO, 40 MHz, 4 MB. Reset the board after flashing.\n')
 (out/'manifest.json').write_text(json.dumps({'version':Path('VERSION').read_text().strip(),
     'commit':os.environ.get('GITHUB_SHA','local'),'chip':'esp32s2','mergedOffset':'0x0',
     'appOffset':'0x10000','core':'3.3.12','hardwareValidated':False},indent=2))

@@ -23,7 +23,7 @@ Matrix: hàng 1 = K1…K4; hàng 2 = K5…K8. Mỗi phím có diode theo chiều
 
 Touch dùng chung XP=D39, XM=D14, YP=D13, YM=D40. CS LCD được kéo cao khi đo, sau đó phục hồi bus. ADC 10 bit. Giá trị hiệu chuẩn tham khảo: x=136…907, y=139…942, landscape đảo trục theo panel cũ. Bản này dùng touch để chọn P1…P5 ở đáy màn hình; độ chính xác cần xác nhận trên phần cứng.
 
-LCD đã được ghi nhận ID `0x8357` từ thanh ghi `0xBF` (`00 01 62 83 57 FF`). Driver dùng HX8357-B, MADCTL `0x28`, RGB565, INVON. Không dùng init HX8357-D. Shield cần cả 5V và 3V3 như bảng; lịch sử ghi nhận màn rất tối khi bỏ chân 3V3 POWER.
+LCD đã được ghi nhận ID `0x8357` từ thanh ghi `0xBF` (`00 01 62 83 57 FF`). Driver dùng HX8357-B, RGB565, INVON. Bản 2.0.1 dùng init tối giản (không ghi đè power/VCOM/gamma), thêm khoảng setup/WR-low/hold trên bus và chờ 1 giây sau reset. MADCTL mặc định `0xE8` xoay 180° so với `0x28` của bản 2.0.0; có thể chọn/lưu hướng khác từ Studio. Không dùng init HX8357-D. Shield cần cả 5V và 3V3 như bảng; lịch sử ghi nhận màn rất tối khi bỏ chân 3V3 POWER.
 
 Nguồn tham khảo chỉ đọc:
 - [HARDWARE tại commit đã kiểm tra](https://github.com/mihqag148/PIXEL-PRO/blob/8086533652f131a41edf0c38a80da5b109643350/docs/HARDWARE.md)

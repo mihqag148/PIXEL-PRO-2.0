@@ -17,7 +17,7 @@ public sealed class Device : IDisposable {
         _=Task.Run(()=>Read(serial,token));
         try {
             var hello=await Request("HELLO");
-            if(!hello.StartsWith("PIXELPRO2|2.0.0|5|8|"))throw new IOException("Thiết bị không phải PIXEL PRO 2.0 tương thích.");
+            if(!Protocol.CompatibleHello(hello))throw new IOException("Thiết bị không phải PIXEL PRO 2.0 tương thích.");
         }catch {Dispose();throw;}
     }
     void Read(SerialPort serial,CancellationToken token) {

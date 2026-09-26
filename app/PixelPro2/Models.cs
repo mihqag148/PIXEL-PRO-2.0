@@ -1,5 +1,13 @@
 using System.Text.Json;
 namespace PixelPro2;
+public static class Protocol {
+    public static bool CompatibleHello(string hello) {
+        var parts=hello.Split('|');
+        return parts.Length>=6 && parts[0]=="PIXELPRO2" &&
+            Version.TryParse(parts[1],out var version) && version.Major==2 && version.Minor==0 &&
+            parts[2]=="5" && parts[3]=="8" && parts[4]=="HX8357B";
+    }
+}
 public sealed class Step {
     public string Type { get; set; } = "Text";
     public string Value { get; set; } = "";

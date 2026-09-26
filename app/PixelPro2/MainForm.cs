@@ -8,6 +8,7 @@ public sealed class MainForm : Form {
     readonly ComboBox ports=new(){Width=120,DropDownStyle=ComboBoxStyle.DropDownList};
     readonly ComboBox profiles=new(){Width=160,DropDownStyle=ComboBoxStyle.DropDownList};
     readonly ComboBox kind=new(){Width=260,DropDownStyle=ComboBoxStyle.DropDownList};
+    readonly ComboBox orientation=new(){Width=230,DropDownStyle=ComboBoxStyle.DropDownList};
     readonly TextBox label=new(){Width=240,MaxLength=12};
     readonly NumericUpDown code=new(){Width=100,Maximum=65535};
     readonly NumericUpDown modifiers=new(){Width=100,Maximum=255};
@@ -36,6 +37,12 @@ public sealed class MainForm : Form {
         profiles.Items.AddRange(Enumerable.Range(1,5).Select(p=>(object)$"Profile {p}").ToArray());profiles.SelectedIndex=0;controls.Controls.Add(profiles);
         Button(controls,"Đọc thiết bị",ReadDevice);Button(controls,"Gửi & lưu",Upload);
         Button(controls,"Nhập preset",Import);Button(controls,"Xuất preset",Export);
+        orientation.Items.AddRange(new object[]{"Màn hình: hướng bản 2.0.0","Màn hình: xoay 180°","Màn hình: lật ngang","Màn hình: 180° + lật ngang"});
+        orientation.SelectedIndex=1;controls.Controls.Add(orientation);
+        Button(controls,"Áp dụng hướng",async()=> {
+            await device.Request($"DISPLAY|{orientation.SelectedIndex}");
+            status.Text="Đã lưu hướng màn hình và cảm ứng";
+        });
         controls.Controls.Add(status);
         var grid=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(12)};
         for(int c=0;c<4;c++)grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
@@ -110,6 +117,9 @@ public sealed class MainForm : Form {
     async Task Connect() {
         SaveEditor();if(ports.SelectedItem is not string port)throw new IOException("Không có cổng COM. Cắm thiết bị rồi quét lại.");
         await device.Connect(port);armed.Checked=false;
+        try {
+            if(int.TryParse(await device.Request("PANEL"),out int mode)&&mode is >=0 and <=3)orientation.SelectedIndex=mode;
+        }catch(IOException){Log("Firmware chưa hỗ trợ chỉnh hướng; cần bản 2.0.1 trở lên.");}
         status.Text="Đã kết nối · Chọn Đọc thiết bị hoặc Gửi & lưu";Log("Đã nhận diện PIXEL PRO 2.0; chưa thay đổi preset.");
     }
     async Task ReadDevice() {
