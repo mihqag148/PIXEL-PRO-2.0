@@ -382,7 +382,8 @@ void finishUpload() {
 
 void consumeUpload() {
   if(!upload.active)return;
-  uint32_t remaining=upload.expected-upload.received;\n  uint16_t needed=uint16_t(remaining>sizeof(upload.buffer)?sizeof(upload.buffer):remaining);
+  uint32_t remaining=upload.expected-upload.received;
+  uint16_t needed=uint16_t(remaining>sizeof(upload.buffer)?sizeof(upload.buffer):remaining);
   while(upload.fill<needed&&usbLink.available()) {
     int c=usbLink.read();
     if(c<0)break;
