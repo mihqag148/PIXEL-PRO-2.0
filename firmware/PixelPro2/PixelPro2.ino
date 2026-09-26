@@ -31,6 +31,8 @@ struct TouchCalibration {
 };
 struct UploadState {
   bool active=false;
+  bool icon=false;
+  uint8_t iconProfile=0,iconKey=0;
   uint32_t expected=0,received=0,crcExpected=0,crc=0xFFFFFFFF;
   uint16_t fill=0;
   uint8_t buffer[512];
@@ -61,6 +63,7 @@ int calRawX[4]{},calRawY[4]{};
 // Media player
 File mediaFile;
 uint8_t* mediaFrame=nullptr;
+uint8_t iconFrame[48*48]{};
 uint16_t mediaW=0,mediaH=0,mediaFrames=0,mediaDelay=100,mediaIndex=0;
 bool mediaActive=false;
 uint32_t mediaNext=0;
@@ -285,6 +288,31 @@ void scanTouch(uint32_t now) {
   }
 }
 
+bool readIconHeader(File& file,uint16_t& w,uint16_t& h) {
+  uint8_t header[8]{};
+  if(!file||file.read(header,sizeof(header))!=sizeof(header))return false;
+  if(memcmp(header,"PXI1",4)!=0)return false;
+  w=uint16_t(header[4]|(uint16_t(header[5])<<8));
+  h=uint16_t(header[6]|(uint16_t(header[7])<<8));
+  if(w!=48||h!=48)return false;
+  return file.size()==8UL+uint32_t(w)*h;
+}
+
+bool drawKeyIcon(uint8_t p,uint8_t k,int16_t x,int16_t y) {
+  if(!flashReady)return false;
+  char path[16];
+  snprintf(path,sizeof(path),"/i%u%u.pxi",unsigned(p),unsigned(k));
+  File file=SPIFFS.open(path,FILE_READ);
+  uint16_t w=0,h=0;
+  if(!readIconHeader(file,w,h)){if(file)file.close();return false;}
+  uint32_t bytes=uint32_t(w)*h;
+  bool ok=file.read(iconFrame,bytes)==bytes;
+  file.close();
+  if(!ok)return false;
+  panel.drawRgb332(x,y,iconFrame,w,h);
+  return true;
+}
+
 void render() {
   if(mediaActive||calibrating)return;
   if(displayDirty) {
@@ -308,11 +336,17 @@ void render() {
     panel.fillRect(x,y,112,104,keys[k].stable?0xFFFF:0x18C6);
     panel.fillRect(x,y,112,4,b.color);
     panel.setTextColor(keys[k].stable?0x0843:0xFFFF);
-    panel.setTextSize(2);
-    panel.setCursor(x+10,y+20);
-    panel.print(k+1);
     panel.setTextSize(1);
-    panel.setCursor(x+8,y+64);
+    panel.setCursor(x+7,y+8);
+    panel.print(k+1);
+    bool hasIcon=drawKeyIcon(profile,k,x+32,y+10);
+    if(!hasIcon) {
+      panel.setTextSize(2);
+      panel.setCursor(x+43,y+30);
+      panel.print(k+1);
+    }
+    panel.setTextSize(1);
+    panel.setCursor(x+8,y+70);
     panel.print(b.label);
     static const uint8_t order[]={0,1,2,3,7,6,5,4};
     leds.setPixelColor(order[k],leds.Color(((b.color>>11)&31)*8,((b.color>>5)&63)*4,(b.color&31)*8));
@@ -368,12 +402,23 @@ void finishUpload() {
   if(upload.file)upload.file.close();
   uint32_t crc=upload.crc^0xFFFFFFFFUL;
   if(upload.received!=upload.expected||crc!=upload.crcExpected){abortUpload("CRC");return;}
+
   File check=SPIFFS.open("/upload.tmp",FILE_READ);
-  bool valid=readMediaHeader(check);
+  bool valid=false;
+  if(upload.icon) {
+    uint16_t w=0,h=0;
+    valid=readIconHeader(check,w,h);
+  } else valid=readMediaHeader(check);
   if(check)check.close();
   if(!valid){abortUpload("FORMAT");return;}
-  SPIFFS.remove("/screensaver.pxg");
-  if(!SPIFFS.rename("/upload.tmp","/screensaver.pxg")){abortUpload("RENAME");return;}
+
+  char target[24];
+  if(upload.icon)snprintf(target,sizeof(target),"/i%u%u.pxi",unsigned(upload.iconProfile),unsigned(upload.iconKey));
+  else strcpy(target,"/screensaver.pxg");
+  SPIFFS.remove(target);
+  if(!SPIFFS.rename("/upload.tmp",target)){abortUpload("RENAME");return;}
+
+  if(upload.icon&&upload.iconProfile==profile)dirtyTiles|=1<<upload.iconKey;
   upload.active=false;
   upload.fill=0;
   userActivity();
@@ -421,7 +466,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.1.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER");
+    ok("PIXELPRO2|2.1.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -505,6 +550,37 @@ void request(char* line) {
     SPIFFS.remove("/upload.tmp");
     ok("DELETED");return;
   }
+  if(cmd=="ICON"&&n==5&&strcmp(tokens[2],"DELETE")==0&&
+     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)) {
+    if(!flashReady){error("FLASH");return;}
+    char path[16];
+    snprintf(path,sizeof(path),"/i%u%u.pxi",unsigned(p),unsigned(k));
+    SPIFFS.remove(path);
+    if(p==profile)dirtyTiles|=1<<k;
+    ok("DELETED");return;
+  }
+  if(cmd=="ICON"&&n==7&&strcmp(tokens[2],"BEGIN")==0&&
+     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)&&
+     Pixel::number(tokens[5],8192,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
+    if(!flashReady||v<8){error("ICON");return;}
+    stopSaver();
+    if(upload.file)upload.file.close();
+    SPIFFS.remove("/upload.tmp");
+    upload.file=SPIFFS.open("/upload.tmp",FILE_WRITE);
+    if(!upload.file){error("FLASH");return;}
+    upload.active=true;
+    upload.icon=true;
+    upload.iconProfile=p;
+    upload.iconKey=k;
+    upload.expected=v;
+    upload.received=0;
+    upload.crcExpected=m;
+    upload.crc=0xFFFFFFFFUL;
+    upload.fill=0;
+    ok("READY|512");
+    return;
+  }
+
   if(cmd=="MEDIA"&&n==5&&strcmp(tokens[2],"BEGIN")==0&&
      Pixel::number(tokens[3],1900000,v)&&Pixel::number(tokens[4],0xFFFFFFFFUL,m)) {
     if(!flashReady||v<12){error("MEDIA");return;}
@@ -514,6 +590,7 @@ void request(char* line) {
     upload.file=SPIFFS.open("/upload.tmp",FILE_WRITE);
     if(!upload.file){error("FLASH");return;}
     upload.active=true;
+    upload.icon=false;
     upload.expected=v;
     upload.received=0;
     upload.crcExpected=m;
