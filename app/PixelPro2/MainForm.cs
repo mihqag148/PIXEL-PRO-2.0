@@ -92,6 +92,8 @@ public sealed class MainForm : Form {
         });
         Button(controls,"Tải GIF",UploadGif);
         Button(controls,"Xóa GIF",DeleteGif);
+        Button(controls,"Tải icon phím",UploadIcon);
+        Button(controls,"Xóa icon phím",DeleteIcon);
         controls.Controls.Add(transfer);
         controls.Controls.Add(mediaInfo);
         controls.Controls.Add(status);
@@ -430,6 +432,24 @@ public sealed class MainForm : Form {
         MessageBox.Show(this,
             "Chạm chính xác vào dấu + đang hiện trên màn hình.\nThứ tự: trên-trái → trên-phải → dưới-phải → dưới-trái.",
             "Touch calibration",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
+    async Task UploadIcon() {
+        using var dialog=new OpenFileDialog{Filter="Image|*.png;*.jpg;*.jpeg;*.bmp;*.gif"};
+        if(dialog.ShowDialog()!=DialogResult.OK)return;
+        if(!device.Connected)throw new IOException("Kết nối PIXEL PRO trước khi tải icon.");
+        status.Text=$"Đang xử lý icon P{currentProfile+1} K{currentKey+1}…";
+        transfer.Value=0;
+        byte[] data=await Task.Run(()=>MediaCodec.FromIcon(dialog.FileName));
+        var progress=new Progress<int>(v=>transfer.Value=Math.Clamp(v,0,100));
+        await device.UploadIcon(currentProfile,currentKey,data,progress,shutdown.Token);
+        status.Text=$"Đã lưu icon P{currentProfile+1} K{currentKey+1} vào flash";
+    }
+
+    async Task DeleteIcon() {
+        await device.Request($"ICON|DELETE|{currentProfile}|{currentKey}");
+        transfer.Value=0;
+        status.Text=$"Đã xóa icon P{currentProfile+1} K{currentKey+1}";
     }
 
     async Task UploadGif() {
