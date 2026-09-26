@@ -1,0 +1,109 @@
+name: Build, test and release PIXEL PRO 2.0
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pixel-pro-2-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce target repository
+        run: test "$GITHUB_REPOSITORY" = mihqag148/PIXEL-PRO-2.0
+      - name: Test firmware model
+        run: |
+          mkdir -p build
+          g++ -std=c++17 -Wall -Wextra -Werror tests/model_test.cpp -o build/model-test
+          build/model-test
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: 1.5.1
+      - name: Install pinned core and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          for attempt in 1 2 3; do
+            if arduino-cli core install esp32:esp32@3.3.12; then break; fi
+            test "$attempt" != 3 || exit 1
+            sleep 10
+          done
+          arduino-cli lib install 'Adafruit GFX Library@1.11.11' 'Adafruit NeoPixel@1.15.5'
+      - name: Compile actual ESP32-S2 firmware
+        run: >-
+          arduino-cli compile
+          --fqbn 'esp32:esp32:esp32s2:PSRAM=enabled,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,FlashMode=dio'
+          --output-dir build/raw firmware/PixelPro2
+      - name: Verify and package firmware
+        run: |
+          python -m pip install esptool==5.1.0
+          python tools/package_firmware.py "$HOME/.arduino15/packages/esp32/hardware/esp32/3.3.12"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            dist/PIXEL-PRO-2.0-firmware.zip
+            dist/firmware/PIXEL_PRO_2_merged.bin
+            dist/firmware/PIXEL_PRO_2_app.bin
+          if-no-files-found: error
+  app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Test app protocol and presets
+        run: dotnet run --project tests/AppTests/AppTests.csproj -c Release
+      - name: Publish self-contained Windows Studio
+        run: dotnet publish app/PixelPro2/PixelPro2.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -o dist/studio
+      - name: Package app
+        shell: pwsh
+        run: |
+          Copy-Item docs/STUDIO.md,THIRD_PARTY.md dist/studio
+          Compress-Archive -Path dist/studio/* -DestinationPath dist/PIXEL-PRO-2.0-Studio-win-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio
+          path: dist/PIXEL-PRO-2.0-Studio-win-x64.zip
+          if-no-files-found: error
+  release:
+    needs: [firmware, app]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'mihqag148/PIXEL-PRO-2.0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Verify all release assets
+        run: |
+          mkdir release
+          find artifacts -type f -exec cp '{}' release/ \;
+          test -s release/PIXEL-PRO-2.0-firmware.zip
+          test -s release/PIXEL-PRO-2.0-Studio-win-x64.zip
+          test -s release/PIXEL_PRO_2_merged.bin
+          test -s release/PIXEL_PRO_2_app.bin
+          cd release
+          sha256sum *.bin *.zip > SHA256SUMS.txt
+      - name: Publish immutable version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; no tag or asset overwritten."
+            exit 0
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "PIXEL PRO 2.0 — $VERSION" --notes-file docs/RELEASE.md release/*
