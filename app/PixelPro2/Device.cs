@@ -124,16 +124,23 @@ public sealed class Device : IDisposable {
         finally { gate.Release(); }
     }
 
-    public async Task UploadMedia(byte[] data,IProgress<int>? progress=null,CancellationToken token=default) {
-        if(data is null||data.Length<12) throw new ArgumentException("Media package không hợp lệ.",nameof(data));
-        if(data.Length>1_900_000) throw new IOException("Media vượt giới hạn 1.9 MB của PIXEL PRO 2.0.");
+    public Task UploadMedia(byte[] data,IProgress<int>? progress=null,CancellationToken token=default) =>
+        UploadBinary($"MEDIA|BEGIN|{data.Length}|{Crc32(data)}",data,12,1_900_000,progress,token);
+
+    public Task UploadIcon(int profile,int key,byte[] data,IProgress<int>? progress=null,CancellationToken token=default) {
+        if(profile is <0 or >4||key is <0 or >7)throw new ArgumentOutOfRangeException();
+        return UploadBinary($"ICON|BEGIN|{profile}|{key}|{data.Length}|{Crc32(data)}",data,8,8192,progress,token);
+    }
+
+    async Task UploadBinary(string begin,byte[] data,int minBytes,int maxBytes,IProgress<int>? progress,CancellationToken token) {
+        if(data is null||data.Length<minBytes)throw new ArgumentException("Binary package không hợp lệ.",nameof(data));
+        if(data.Length>maxBytes)throw new IOException("Binary package vượt giới hạn.");
         await gate.WaitAsync(token);
         try {
-            if(!Connected) throw new IOException("Chưa kết nối thiết bị.");
-            uint crc=Crc32(data);
-            var ready=await RequestLocked($"MEDIA|BEGIN|{data.Length}|{crc}",TimeSpan.FromSeconds(8));
+            if(!Connected)throw new IOException("Chưa kết nối thiết bị.");
+            var ready=await RequestLocked(begin,TimeSpan.FromSeconds(8));
             if(!ready.StartsWith("READY|",StringComparison.Ordinal))
-                throw new IOException("Thiết bị không sẵn sàng nhận media: "+ready);
+                throw new IOException("Thiết bị không sẵn sàng nhận binary: "+ready);
 
             mediaDone=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             const int chunkSize=512;
@@ -146,13 +153,13 @@ public sealed class Device : IDisposable {
                 await port!.BaseStream.WriteAsync(data.AsMemory(sent,count),token);
                 await port.BaseStream.FlushAsync(token);
                 int received=await ack.Task.WaitAsync(TimeSpan.FromSeconds(6),token);
-                if(received<sent+count) throw new IOException($"ACK media sai: {received}/{sent+count}");
+                if(received<sent+count) throw new IOException($"ACK binary sai: {received}/{sent+count}");
                 sent+=count;
                 progress?.Report((int)((long)sent*100/data.Length));
             }
             mediaAck=null;
             string done=await mediaDone.Task.WaitAsync(TimeSpan.FromSeconds(20),token);
-            if(done!="OK") throw new IOException("Thiết bị từ chối media: "+done);
+            if(done!="OK") throw new IOException("Thiết bị từ chối binary: "+done);
             progress?.Report(100);
         } finally {
             mediaAck=null;
