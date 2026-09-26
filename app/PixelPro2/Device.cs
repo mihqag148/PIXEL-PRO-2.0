@@ -1,59 +1,187 @@
-using System.IO.Ports;
 using System.Collections.Concurrent;
+using System.IO.Ports;
+
 namespace PixelPro2;
+
 public sealed class Device : IDisposable {
     SerialPort? port;
     CancellationTokenSource? lifetime;
     readonly ConcurrentDictionary<int,TaskCompletionSource<string>> pending=new();
     readonly SemaphoreSlim gate=new(1,1);
+    TaskCompletionSource<int>? mediaAck;
+    TaskCompletionSource<string>? mediaDone;
     int sequence;
+
     public event Action<string>? Event;
     public event Action<string>? Disconnected;
     public bool Connected => port?.IsOpen==true;
+    public string? PortName => port?.PortName;
+
     public async Task Connect(string name) {
         Dispose();
-        var serial=new SerialPort(name,115200){NewLine="\n",ReadTimeout=300,WriteTimeout=1500,DtrEnable=true,RtsEnable=false};
-        serial.Open();port=serial;lifetime=new();var token=lifetime.Token;
-        _=Task.Run(()=>Read(serial,token));
+        var serial=new SerialPort(name,115200) {
+            NewLine="\n",
+            ReadTimeout=250,
+            WriteTimeout=2500,
+            DtrEnable=true,
+            RtsEnable=true,
+            Handshake=Handshake.None
+        };
+        serial.Open();
+        try { serial.DiscardInBuffer(); serial.DiscardOutBuffer(); } catch(InvalidOperationException) {}
+        port=serial;
+        lifetime=new CancellationTokenSource();
+        var token=lifetime.Token;
+        _=Task.Run(()=>Read(serial,token),token);
+
+        Exception? last=null;
         try {
-            var hello=await Request("HELLO");
-            if(!Protocol.CompatibleHello(hello))throw new IOException("Thiết bị không phải PIXEL PRO 2.0 tương thích.");
-        }catch {Dispose();throw;}
+            await Task.Delay(220,token);
+            for(int attempt=0;attempt<6;attempt++) {
+                try {
+                    var hello=await Request("HELLO",TimeSpan.FromSeconds(2));
+                    if(!Protocol.CompatibleHello(hello))
+                        throw new IOException("Cổng này không phải PIXEL PRO 2.0 tương thích.");
+                    return;
+                } catch(Exception ex) when(ex is TimeoutException or IOException) {
+                    last=ex;
+                    if(attempt<5) await Task.Delay(350,token);
+                }
+            }
+            throw new IOException("PIXEL PRO 2.0 có cổng COM nhưng không trả lời handshake.",last);
+        } catch {
+            Dispose();
+            throw;
+        }
     }
+
     void Read(SerialPort serial,CancellationToken token) {
         string line="";
         try {
             while(!token.IsCancellationRequested) {
                 try {
-                    int c=serial.ReadChar();if(c=='\r')continue;
-                    if(c!='\n'){line+=(char)c;if(line.Length>2048)throw new IOException("Phản hồi thiết bị quá dài.");continue;}
-                    var t=line.Split('|');line="";
+                    int c=serial.ReadChar();
+                    if(c=='\r') continue;
+                    if(c!='\n') {
+                        line+=(char)c;
+                        if(line.Length>4096) line="";
+                        continue;
+                    }
+                    if(line.Length==0) continue;
+                    var t=line.Split('|');
+                    line="";
                     if(t.Length>=4&&t[0]=="R"&&int.TryParse(t[1],out int id)&&pending.TryRemove(id,out var request)) {
-                        if(t[2]=="OK")request.TrySetResult(string.Join('|',t.Skip(3)));
+                        if(t[2]=="OK") request.TrySetResult(string.Join('|',t.Skip(3)));
                         else request.TrySetException(new IOException(string.Join('|',t.Skip(3))));
-                    }else if(t.Length>=2&&t[0]=="E")Event?.Invoke(string.Join('|',t));
-                }catch(TimeoutException) {}
+                        continue;
+                    }
+                    if(t.Length>=2&&t[0]=="E") {
+                        if(t.Length>=3&&t[1]=="MEDIAACK"&&int.TryParse(t[2],out int received))
+                            mediaAck?.TrySetResult(received);
+                        else if(t.Length>=3&&t[1]=="MEDIADONE") {
+                            if(t[2]=="OK") mediaDone?.TrySetResult("OK");
+                            else {
+                                var ex=new IOException("Media upload: "+t[2]);
+                                mediaAck?.TrySetException(ex);
+                                mediaDone?.TrySetException(ex);
+                            }
+                        }
+                        Event?.Invoke(string.Join('|',t));
+                    }
+                } catch(TimeoutException) {}
             }
-        }catch(Exception ex) when(ex is IOException or InvalidOperationException or UnauthorizedAccessException) {
+        } catch(Exception ex) when(ex is IOException or InvalidOperationException or UnauthorizedAccessException) {
             if(!token.IsCancellationRequested) {
-                foreach(var pair in pending)if(pending.TryRemove(pair.Key,out var request))request.TrySetException(ex);
-                serial.Close();Disconnected?.Invoke(ex.Message);
+                foreach(var pair in pending)
+                    if(pending.TryRemove(pair.Key,out var request)) request.TrySetException(ex);
+                mediaAck?.TrySetException(ex);
+                mediaDone?.TrySetException(ex);
+                try { serial.Close(); } catch {}
+                Disconnected?.Invoke(ex.Message);
             }
         }
     }
-    public async Task<string> Request(string command) {
-        await gate.WaitAsync();int id=0;
+
+    async Task<string> RequestLocked(string command,TimeSpan timeout) {
+        if(!Connected) throw new IOException("Chưa kết nối thiết bị.");
+        int id=sequence=sequence%65535+1;
+        var result=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        pending[id]=result;
         try {
-            if(!Connected)throw new IOException("Chưa kết nối thiết bị.");
-            id=sequence=sequence%65535+1;
-            var result=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);pending[id]=result;
             port!.WriteLine($"{id}|{command}");
-            return await result.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        }finally {if(id!=0)pending.TryRemove(id,out _);gate.Release();}
+            return await result.Task.WaitAsync(timeout);
+        } finally {
+            pending.TryRemove(id,out _);
+        }
     }
+
+    public async Task<string> Request(string command) =>
+        await Request(command,TimeSpan.FromSeconds(5));
+
+    public async Task<string> Request(string command,TimeSpan timeout) {
+        await gate.WaitAsync();
+        try { return await RequestLocked(command,timeout); }
+        finally { gate.Release(); }
+    }
+
+    public async Task UploadMedia(byte[] data,IProgress<int>? progress=null,CancellationToken token=default) {
+        if(data is null||data.Length<12) throw new ArgumentException("Media package không hợp lệ.",nameof(data));
+        if(data.Length>1_900_000) throw new IOException("Media vượt giới hạn 1.9 MB của PIXEL PRO 2.0.");
+        await gate.WaitAsync(token);
+        try {
+            if(!Connected) throw new IOException("Chưa kết nối thiết bị.");
+            uint crc=Crc32(data);
+            var ready=await RequestLocked($"MEDIA|BEGIN|{data.Length}|{crc}",TimeSpan.FromSeconds(8));
+            if(!ready.StartsWith("READY|",StringComparison.Ordinal))
+                throw new IOException("Thiết bị không sẵn sàng nhận media: "+ready);
+
+            mediaDone=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            const int chunkSize=512;
+            int sent=0;
+            while(sent<data.Length) {
+                token.ThrowIfCancellationRequested();
+                int count=Math.Min(chunkSize,data.Length-sent);
+                var ack=new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                mediaAck=ack;
+                await port!.BaseStream.WriteAsync(data.AsMemory(sent,count),token);
+                await port.BaseStream.FlushAsync(token);
+                int received=await ack.Task.WaitAsync(TimeSpan.FromSeconds(6),token);
+                if(received<sent+count) throw new IOException($"ACK media sai: {received}/{sent+count}");
+                sent+=count;
+                progress?.Report((int)((long)sent*100/data.Length));
+            }
+            mediaAck=null;
+            string done=await mediaDone.Task.WaitAsync(TimeSpan.FromSeconds(20),token);
+            if(done!="OK") throw new IOException("Thiết bị từ chối media: "+done);
+            progress?.Report(100);
+        } finally {
+            mediaAck=null;
+            mediaDone=null;
+            gate.Release();
+        }
+    }
+
+    public static uint Crc32(ReadOnlySpan<byte> data) {
+        uint crc=0xFFFFFFFF;
+        foreach(byte b in data) {
+            crc^=b;
+            for(int i=0;i<8;i++) crc=(crc&1)!=0?(crc>>1)^0xEDB88320:crc>>1;
+        }
+        return crc^0xFFFFFFFF;
+    }
+
     public void Dispose() {
-        lifetime?.Cancel();lifetime?.Dispose();lifetime=null;
-        try{port?.Close();}catch(IOException){}port?.Dispose();port=null;
-        foreach(var p in pending)if(pending.TryRemove(p.Key,out var request))request.TrySetCanceled();
+        lifetime?.Cancel();
+        lifetime?.Dispose();
+        lifetime=null;
+        try { port?.Close(); } catch {}
+        port?.Dispose();
+        port=null;
+        foreach(var p in pending)
+            if(pending.TryRemove(p.Key,out var request)) request.TrySetCanceled();
+        mediaAck?.TrySetCanceled();
+        mediaDone?.TrySetCanceled();
+        mediaAck=null;
+        mediaDone=null;
     }
 }
