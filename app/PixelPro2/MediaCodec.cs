@@ -17,6 +17,7 @@ public static class MediaCodec {
     public const int Height=106;
     public const int HeaderSize=12;
     public const int MaxBytes=1_800_000;
+    public const int IconSize=48;
 
     public static MediaPackage FromGif(string path) {
         using var source=Image.FromFile(path);
@@ -39,20 +40,45 @@ public static class MediaCodec {
         for(int i=0;i<frames;i++) {
             int sourceIndex=Math.Min(sourceFrames-1,(int)Math.Floor(i*(sourceFrames/(double)frames)));
             source.SelectActiveFrame(dimension,sourceIndex);
-            using var bitmap=new Bitmap(Width,Height,PixelFormat.Format24bppRgb);
-            using(var graphics=Graphics.FromImage(bitmap)) {
-                graphics.Clear(Color.Black);
-                graphics.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                graphics.PixelOffsetMode=System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                graphics.CompositingQuality=System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                graphics.DrawImage(source,new Rectangle(0,0,Width,Height));
-            }
+            using var bitmap=Render(source,Width,Height);
             WriteRgb332(bitmap,writer);
         }
 
         byte[] data=stream.ToArray();
-        if(data.Length>MaxBytes) throw new IOException("GIF sau chuyển đổi vượt 1.8 MB.");
+        if(data.Length>MaxBytes)throw new IOException("GIF sau chuyển đổi vượt 1.8 MB.");
         return new MediaPackage{Data=data,Width=Width,Height=Height,Frames=frames,DelayMs=delayMs};
+    }
+
+    public static byte[] FromIcon(string path) {
+        using var source=Image.FromFile(path);
+        if(source.FrameDimensionsList.Length>0) {
+            var dimension=new FrameDimension(source.FrameDimensionsList[0]);
+            source.SelectActiveFrame(dimension,0);
+        }
+        using var bitmap=Render(source,IconSize,IconSize);
+        using var stream=new MemoryStream(8+IconSize*IconSize);
+        using var writer=new BinaryWriter(stream);
+        writer.Write(new byte[]{(byte)'P',(byte)'X',(byte)'I',(byte)'1'});
+        writer.Write((ushort)IconSize);
+        writer.Write((ushort)IconSize);
+        WriteRgb332(bitmap,writer);
+        return stream.ToArray();
+    }
+
+    static Bitmap Render(Image source,int width,int height) {
+        var bitmap=new Bitmap(width,height,PixelFormat.Format24bppRgb);
+        using var graphics=Graphics.FromImage(bitmap);
+        graphics.Clear(Color.Black);
+        graphics.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        graphics.PixelOffsetMode=System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        graphics.CompositingQuality=System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+
+        double scale=Math.Min(width/(double)source.Width,height/(double)source.Height);
+        int w=Math.Max(1,(int)Math.Round(source.Width*scale));
+        int h=Math.Max(1,(int)Math.Round(source.Height*scale));
+        int x=(width-w)/2,y=(height-h)/2;
+        graphics.DrawImage(source,new Rectangle(x,y,w,h));
+        return bitmap;
     }
 
     static int ReadTotalDuration(Image source,int frames) {
@@ -62,12 +88,12 @@ public static class MediaCodec {
                 long total=0;
                 for(int i=0;i<frames&&i*4+3<item.Value.Length;i++) {
                     int hundredths=BitConverter.ToInt32(item.Value,i*4);
-                    if(hundredths<=0) hundredths=10;
+                    if(hundredths<=0)hundredths=10;
                     total+=hundredths*10L;
                 }
-                if(total>0&&total<int.MaxValue) return (int)total;
+                if(total>0&&total<int.MaxValue)return(int)total;
             }
-        } catch(ArgumentException) {}
+        }catch(ArgumentException){}
         return frames*100;
     }
 
@@ -86,6 +112,6 @@ public static class MediaCodec {
                     writer.Write((byte)((r&0xE0)|((g&0xE0)>>3)|(b>>6)));
                 }
             }
-        } finally { bitmap.UnlockBits(bits); }
+        }finally{bitmap.UnlockBits(bits);}
     }
 }
