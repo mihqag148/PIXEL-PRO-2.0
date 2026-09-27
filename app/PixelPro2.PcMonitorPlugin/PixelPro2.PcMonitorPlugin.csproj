@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PixelPro2.PcMonitorPlugin</AssemblyName>
+    <Version>2.5.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../PixelPro2/SystemMonitor.cs" Link="SystemMonitor.cs" />
