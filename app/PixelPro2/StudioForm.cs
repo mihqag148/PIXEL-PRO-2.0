@@ -7,8 +7,10 @@ public sealed class StudioForm : Form {
     sealed record ActionDef(string Name,string Type,string DefaultValue,string Hint,bool HidCapable);
     sealed record KeyDrag(int Profile,int Key);
     sealed record ProfileDrag(int Profile);
-    sealed record DeviceEntry(string Port,bool Connected) {
-        public override string ToString()=>Connected?$"{Port}    Connected":$"{Port}    Available";
+    sealed record DeviceEntry(string Port,bool Connected,string Version="",string Id="") {
+        public override string ToString()=>Connected
+            ?$"{Port}    Connected    v{Version}    {Id}"
+            :$"{Port}    Available";
     }
     sealed class StepItem {
         public Step Step { get; }
@@ -959,7 +961,11 @@ public sealed class StudioForm : Form {
         loading=true;
         try {
             deviceList.Items.Clear();
-            foreach(var port in ports)deviceList.Items.Add(new DeviceEntry(port,device.IsConnected(port)));
+            foreach(var port in ports) {
+                bool connected=device.IsConnected(port);
+                var meta=device.Metadata(port);
+                deviceList.Items.Add(new DeviceEntry(port,connected,meta.version,meta.id));
+            }
             var target=deviceList.Items.Cast<DeviceEntry>().FirstOrDefault(x=>
                 string.Equals(x.Port,keep,StringComparison.OrdinalIgnoreCase));
             if(target!=null)deviceList.SelectedItem=target;
