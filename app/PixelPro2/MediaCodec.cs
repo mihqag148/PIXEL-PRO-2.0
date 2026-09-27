@@ -66,8 +66,13 @@ public static class MediaCodec {
     }
 
     public static byte[] FromNativeScript(IEnumerable<Step> sourceSteps) {
-        var steps=sourceSteps?.ToList()??throw new ArgumentNullException(nameof(sourceSteps));
-        if(steps.Count is <1 or >512)throw new FormatException("HID script cần 1..512 action.");
+        var input=sourceSteps?.ToList()??throw new ArgumentNullException(nameof(sourceSteps));
+        var steps=new List<Step>();
+        foreach(var step in input) {
+            if(step.Type=="Script")steps.AddRange(EezScript.Expand(step.Value,true));
+            else steps.Add(step);
+        }
+        if(steps.Count is <1 or >512)throw new FormatException("HID script cần 1..512 action sau khi biên dịch.");
 
         using var stream=new MemoryStream();
         using var writer=new BinaryWriter(stream);
@@ -133,6 +138,37 @@ public static class MediaCodec {
                         _=>throw new FormatException("HID DeviceCtrl hiện hỗ trợ PROFILE_NEXT/PROFILE_PREV.")
                     };
                     writer.Write((byte)8);writer.Write(code);
+                    break;
+                }
+                case "NativeMouseMove": {
+                    var (x,y)=MacroValue.Point(value);
+                    if(x is <-127 or >127||y is <-127 or >127)
+                        throw new FormatException("Script MOUSE_MOVE chỉ hỗ trợ -127..127.");
+                    writer.Write((byte)9);
+                    writer.Write(unchecked((byte)(sbyte)x));
+                    writer.Write(unchecked((byte)(sbyte)y));
+                    break;
+                }
+                case "NativeTextTimed": {
+                    int sep=value.IndexOf('|');
+                    if(sep<1||!ushort.TryParse(value[..sep],out ushort delay)||delay>30000)
+                        throw new FormatException("DEFAULTCHARDELAY không hợp lệ.");
+                    string textValue=value[(sep+1)..];
+                    byte[] text=System.Text.Encoding.ASCII.GetBytes(textValue);
+                    if(text.Length is <1 or >255||textValue.Any(ch=>ch>127))
+                        throw new FormatException("Script STRING hỗ trợ 1..255 ký tự ASCII.");
+                    writer.Write((byte)12);writer.Write(delay);writer.Write((byte)text.Length);writer.Write(text);
+                    break;
+                }
+                case "NativeChordTimed": {
+                    int sep=value.IndexOf('|');
+                    if(sep<1||!ushort.TryParse(value[..sep],out ushort duration)||duration>30000)
+                        throw new FormatException("DEFAULTDURATION không hợp lệ.");
+                    string chord=value[(sep+1)..];
+                    if(!HidShortcut.TryParse(chord,out int usage,out int modifiers))
+                        throw new FormatException($"Script chord không hợp lệ: {chord}");
+                    writer.Write((byte)13);writer.Write(duration);
+                    writer.Write((byte)modifiers);writer.Write((byte)1);writer.Write((byte)usage);
                     break;
                 }
                 default:
