@@ -1,4 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
-  <ItemGroup><Compile Include="../../app/PixelPro2/Models.cs" Link="Models.cs" /></ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../app/PixelPro2/Models.cs" Link="Models.cs" />
+    <Compile Include="../../app/PixelPro2/MediaCodec.cs" Link="MediaCodec.cs" />
+  </ItemGroup>
 </Project>
