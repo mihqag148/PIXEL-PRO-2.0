@@ -43,7 +43,7 @@ Configuration config{};
 TouchCalibration touchCal{0x50544331,942,139,136,907};
 UploadState upload;
 uint8_t profile=0;
-uint8_t displayMode=1;
+uint8_t displayMode=0;
 uint16_t saverSeconds=30;
 Pixel::Debounce keys[8],push,touch;
 bool suppressed[8]{};
@@ -105,8 +105,11 @@ void loadConfig() {
 }
 
 void emit(const String& text) {
-  // USBCDC::operator bool() is true only while the host asserts DTR+RTS.
-  if(usbLink)usbLink.println(text);
+  // Do not gate replies on USBCDC::operator bool(). Arduino-ESP32's wrapper
+  // requires its own DTR+RTS state to become "connected", while TinyUSB can
+  // already have a valid CDC transport. USBCDC::write() safely returns 0 when
+  // the actual CDC endpoint is unavailable.
+  usbLink.println(text);
 }
 
 uint32_t crcUpdate(uint32_t crc,uint8_t b) {
@@ -515,12 +518,12 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.2.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
+    ok("PIXELPRO2|2.2.1|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
   if(cmd=="DISPLAY"&&n==3&&Pixel::number(tokens[2],3,v)) {
-    if(prefs.putUChar("orientation",v)!=1){error("STORAGE");return;}
+    if(prefs.putUChar("orient2",v)!=1){error("STORAGE");return;}
     displayMode=v;
     panel.orientation(displayMode);
     displayDirty=true;dirtyTiles=255;
@@ -678,14 +681,17 @@ void setup() {
   USB.manufacturerName("PIXEL PRO");
   keyboard.begin();
   media.begin();
-  usbLink.begin();
   usbLink.enableReboot(false);
+  usbLink.setTxTimeoutMs(25);
+  usbLink.begin();
   USB.begin();
 
   prefs.begin("pixelpro2",false);
   loadConfig();
-  displayMode=prefs.getUChar("orientation",1);
-  if(displayMode>3)displayMode=1;
+  // orient2 deliberately ignores the old orientation value: that mapping used
+  // the wrong physical origin for this panel revision.
+  displayMode=prefs.getUChar("orient2",0);
+  if(displayMode>3)displayMode=0;
 
   for(auto p:Pins::rows)pinMode(p,INPUT);
   for(auto p:Pins::cols)pinMode(p,INPUT_PULLUP);
