@@ -1,27 +1,24 @@
-# Validation
+# Validation 2.4
 
 Automated gates:
+- actual ESP32-S2 compile with Arduino-ESP32 3.3.12;
+- C++ model tests including 25-profile ranges;
+- source guards for CDC ownership, stable HX8357-B timing, fast-storage boot, raw touch axis wiring, affine calibration, ghost filtering, PXS2 and 25-profile migration;
+- .NET protocol/preset tests including schema-3→4 migration, 25 profiles, ProfilePreset, 512-action PXS2 and Power Off validation;
+- real Studio window smoke render;
+- self-contained win-x64 publish;
+- partition/merged image validation and release SHA256.
 
-- Compile the actual sketch for **ESP32-S2** using Arduino-ESP32 3.3.12.
-- C++ model tests for binding ranges, mouse/script binding types, serial overflow recovery, debounce and display orientation.
-- Source guards for native USB CDC ownership, calibrated HX8357-B startup, fast-boot storage behavior, touch mapping/sampling, PXS2 native scripts and auto screen-off.
-- .NET tests for protocol compatibility, binding serialization, macro validation, HID shortcut conversion, PXS2 encoding up to **512 actions/key**, auto-profile preset schema and JSON round trips.
-- Off-screen construction/render of the real Studio 2.3 window.
-- Publish a self-contained Windows x64 Studio.
-- Verify compiled partition addresses/sizes and merged image, package firmware/Studio, and SHA256 every release asset.
-- Release job depends on both build jobs. Existing tags/assets are never overwritten.
+Physical validation:
+1. flash merged and cold boot five times;
+2. Reset Touch;
+3. enable Touch Diagnostics and tap all four corners + center;
+4. calibrate TL→TR→BR→BL using hold/release;
+5. verify corners, center and bottom profile strip;
+6. test P1/P5/P6/P10/P21/P25 selection through Studio/actions;
+7. test HID keyboard/media/mouse/PXS2 without Studio;
+8. test App Mode, Power Off only on a disposable/test session;
+9. verify Auto Sync prompts when PC/device keymaps differ;
+10. verify GIF/icon/RGB/PC Monitor/auto screen-off and reconnect.
 
-Hardware validation still required:
-
-1. Cold boot/reconnect at least five times: HID + CDC enumerate without waiting for Studio.
-2. After a **full merged flash**, verify the main UI becomes visible promptly; no SPIFFS format should block boot. First media/icon/script upload may initialize the filesystem.
-3. Run four-point touch calibration, then test corners, center and profile strip with light taps. Studio logs x/y/pressure.
-4. Test all 8 keys in simple keyboard HID, media HID, mouse HID and PXS2 native-script modes.
-5. Verify 512-action native-script transfer, execution, delay and profile switching without Studio running.
-6. Verify App Mode actions with Studio in background: URL/app/file/folder, text, shortcuts and mouse movement.
-7. Verify key/profile drag-copy, Save Key, Save Profile and Save To Device.
-8. Verify dynamic profile switching using foreground Windows processes.
-9. Verify LCD orientation, GIF screensaver, key icons, PC Monitor and auto screen-off wake from key/touch/roller.
-10. Disconnect during binary transfer and verify reconnect/retry behavior.
-
-A green CI build proves software build/tests only; it does **not** substitute for validation on the user's physical panel/touch controller.
+Green CI validates software build/tests, not the physical touch panel.

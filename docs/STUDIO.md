@@ -1,116 +1,88 @@
-# Studio Windows 2.3
+# Studio Windows 2.4
 
-Studio 2.3 reorganizes PIXEL PRO 2.0 around the same workflow style users expect from modern Stream-Deck/macropad configurators: choose a profile/key, build an ordered action sequence, choose HID Mode or App Mode, then save only the key/profile or synchronize the entire device.
+## Layout
 
-## Layout / UX
+**Left**
+- Profile & Key Selection: 25 profiles × 8 keys.
+- 5×5 profile selector.
+- key icon / delete icon / per-key color.
+- Device List: Refresh, Auto Find, Connect, Disconnect, Read, Sync / Save.
 
-Left pane:
+**Right**
+- Getting Started.
+- Key Configuration: Action toolbox, ordered Action Sequence, parameters.
+- Display & Media.
+- Auto Profile.
+- Log.
 
-- **Profile & Key Selection**: 5 profiles × 8 keys.
-- Drag one key onto another to copy its binding/action sequence.
-- Drag one profile onto another to copy all 8 bindings/action sequences.
-- Key icon upload/delete and per-key RGB color.
-- **Device List** with Refresh, Auto Find, Connect, Disconnect, Read and Sync / Save.
+Header: Import/Export full preset, Import/Export Profile, firmware page, Light/Dark.
 
-Right pane:
+## Actions
 
-- **Key Configuration**: draggable Action toolbox + ordered Action Sequence.
-- **Display & Media**: LCD orientation, touch calibration, GIF, RGB, PC Monitor and auto screen-off.
-- **Auto Profile**: map foreground Windows process names to profiles.
-- **Log**: CDC/device/macro diagnostics.
+Website, Launch App, Open Folder, Open File, Text, Shortcut, Wait, Mouse Move, Mouse Click, Wheel, Media, Change Profile, Functional Key, Device Control, Power Off Computer.
 
-Header provides Import, Export, Firmware Releases and Light/Dark mode.
+Tối đa **512 actions/key**.
 
-## Action toolbox
+## HID Mode
 
-Studio 2.3 exposes separate actions instead of requiring users to manually type macro syntax:
+Native without Studio:
+- keyboard shortcut / functional key
+- text
+- wait
+- mouse click/wheel
+- media
+- change profile
+- profile next/previous
 
-- Access Website
-- Launch APP
-- Open Folder
-- Open File
-- Input Text
-- Shortcut
-- Wait
-- Mouse Move
-- Mouse Click
-- Mouse Wheel
-- Media Control
-- Change Profile
-- Functional Key
-- Device Control
+Longer native sequences compile to **PXS2** and are stored in SPIFFS. Windows-only actions switch the key to App Mode.
 
-Actions can be dragged/double-clicked into the sequence and reordered/deleted. A key supports up to **512 actions**.
+## Save / copy / import
 
-## HID Mode vs App Mode
+- SAVE KEY: selected key only.
+- SAVE PROFILE: eight keys in selected profile.
+- SAVE TO DEVICE: all 25×8 bindings + device settings.
+- drag key → key to copy.
+- drag profile → profile to copy.
+- Import/Export Profile uses `*.profile.json`.
+- Full preset schema is 4; schema 2/3 five-profile presets auto-migrate.
 
-**HID Mode** runs without Studio when every action in the sequence can be encoded by the device:
+## Auto Sync
 
-- Text
-- Shortcut / Functional Key
-- Wait
-- Mouse Click
-- Mouse Wheel
-- Media Control
-- Change Profile
-- Profile Next / Previous
+Firmware exposes a deterministic FNV-1a `KEYHASH` over all 25×8 bindings. On connect Studio compares it with the local preset:
+- YES: PC → device
+- NO: device → PC
+- CANCEL: postpone
 
-Simple one-action keys are stored directly as native keyboard/media/mouse/profile bindings. Longer HID sequences are compiled by Studio into a **PXS2** native script and stored in SPIFFS.
+## Touch 2.4
 
-**App Mode** requires Studio running and is used for Windows-side actions such as:
+Touch is no longer gated by resistive pressure. The raw axis wiring is taken from the known PIXEL-PRO hardware:
 
-- Website / launch app / open file / open folder
-- Mouse Move
-- PC Monitor toggle
-- other host-only sequences
+```text
+rawX <- D13 (YP)
+rawY <- D14 (XM)
+screenX <- rawY reversed
+screenY <- rawX
+```
 
-The physical device still remains a normal HID keyboard/media/mouse device.
+Filtering:
+- 3 coordinate reads per poll.
+- normal stability spread <=100; calibration <=180.
+- DOWN requires 3 close polls.
+- UP requires 4 misses.
+- poll interval 20 ms.
+- each calibration target collects stable samples and uses median.
 
-## Save scope
+Four calibration points are TL → TR → BR → BL at (40,40), (439,40), (439,279), (40,279). Firmware solves a full affine transform and saves it to NVS key `touchcal2`.
 
-- **SAVE KEY**: send only the selected key (plus its PXS2 script if needed).
-- **SAVE PROFILE**: send the selected profile.
-- **SAVE TO DEVICE**: synchronize all 5 × 8 keys plus RGB, screensaver timeout and display sleep setting.
-- **Save Draft**: save the local schema-3 preset only.
+**Reset Touch** removes the affine calibration and uses the known hardware fallback mapping.
 
-## Dynamic / Auto Profile
+**Touch Diagnostics** streams:
+`E|TOUCHRAW|pressed|rawX|rawY|quality|mappedX|mappedY`.
 
-The Auto Profile tab can bind a Windows foreground process name to Profile 1…5. **Add current app** captures the currently active process. When enabled and PIXEL PRO is connected, Studio checks the foreground process and switches the device profile when a matching rule becomes active.
+## 25 profiles on LCD
 
-## Touch
+The physical screen has five profile buttons at the bottom, so firmware displays the active bank of five. P1…P5, P6…P10, … P21…P25 are selected by the active bank; Studio/Auto Profile/native actions can jump to any profile.
 
-Touch calibration is still four points: top-left → top-right → bottom-right → bottom-left.
+## USB Safe Mode
 
-v2.3 changes the physical sampling path:
-
-- median-of-5 ADC samples,
-- 8 ms scan interval,
-- lower valid pressure threshold,
-- calibration maps the raw calibration values back to the actual on-screen target coordinates (24…455 / 24…295) rather than incorrectly treating them as the panel edges,
-- touch debug events include x, y and pressure.
-
-## Faster boot
-
-A full merged flash leaves the SPIFFS partition blank. Older builds used `SPIFFS.begin(true)` during setup, which could format the filesystem before the UI became usable. v2.3:
-
-- renders the UI before optional storage work,
-- mounts SPIFFS without auto-format at boot,
-- formats only on the first upload if needed,
-- probes optional SD only when requested,
-- keeps the proven v2.2.1 HX8357-B reset / Sleep-Out / Display-On timing; boot improvement comes from avoiding automatic SPIFFS format and lazy SD probing.
-
-## Display / Media
-
-- GIF screensaver: 160×106 RGB332 streamed 3× to the 480×320 panel.
-- 48×48 per-key RGB332 icons.
-- Full-screen PC Monitor.
-- Auto screen-off: **Always On / 30 seconds / 5 minutes / 15 minutes**. HID stays active and key/touch/roller activity wakes the LCD.
-- Orientation 0…3 uses the calibrated landscape base MADCTL `0x68`.
-
-## Connection
-
-Studio opens native USB CDC by asserting DTR first and RTS second. Firmware disables Arduino-ESP32 CDC reboot sequencing and owns CDC interface 0 through its explicit `USBCDC usbLink`.
-
-## Current parity boundary
-
-Studio 2.3 intentionally moves much closer to the public eezbotfun workflow, but it is not claimed as a byte-for-byte or feature-for-feature clone. Features not implemented in this release include simultaneous multi-device sessions, their community preset gallery, integrated SMTC Now Playing/album-art plugin, their custom `cus` display protocol and ESP-NOW wireless mode. PIXEL PRO 2.0 retains its own protocol and hardware-specific implementation.
+PIXEL PRO does not expose USB mass storage. It remains HID + CDC, so the equivalent safe-mode behavior is always active by design.

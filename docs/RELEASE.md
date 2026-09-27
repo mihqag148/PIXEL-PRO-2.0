@@ -1,88 +1,56 @@
-## 2.3.0 — Touch + Fast Boot + eez-style Studio overhaul
+## 2.4.0 — Touch affine rebuild + 25 profiles + Studio parity
 
-### Touch
+### Touch root-cause fix
 
-- Median-of-5 ADC sampling thay cho single sample.
-- Touch scan 25 ms → **8 ms**.
-- Pressure detection mới nhạy hơn và event debug trả thêm pressure.
-- Sửa lỗi calibration thực tế: target nằm ở x=24/455, y=24/295 nhưng firmware cũ map raw endpoints về mép 0/479 và 0/319. v2.3 map đúng về vị trí target rồi mới extrapolate/constrain ra toàn màn.
-- Giữ orientation transform đồng bộ với LCD.
+v2.3 mapped the resistive axes incorrectly for the real MCUFRIEND shield. The verified hardware mapping from the earlier PIXEL-PRO implementation is:
 
-### Fast boot sau merged flash
+- rawX sampled from YP / D13
+- rawY sampled from XM / D14
+- screen X = rawY reversed
+- screen Y = rawX
 
-- Không còn auto-format SPIFFS trong `setup()`.
-- UI được render trước storage optional.
-- SPIFFS mount bằng `begin(false)`; format chỉ khi upload media/icon/script lần đầu cần filesystem.
-- microSD được probe lazy qua `SDINFO`.
-- Khôi phục timing HX8357-B đã ổn định ở v2.2.1: 150 ms sau software reset, 150 ms sau Sleep Out và 50 ms trước khi coi Display ON hoàn tất; tránh tình trạng backlight sáng xám nhưng GRAM/UI chưa hiển thị trên panel thật.
-- Bỏ tối ưu single-fill ở frame đầu: LCD luôn Display OFF → init/orientation → clear black → Display ON, sau đó render lại nền/UI đầu tiên.
+v2.4 ports that geometry back and replaces the old linear calibration with a **4-point affine solve**. Calibration no longer depends on the unreliable pressure test that caused only one corner to register.
 
-### Native HID
+Touch filtering now requires 3 coherent press polls, 4 release misses, tighter normal-sample stability, median calibration samples, and supports live raw diagnostics.
 
-- Thêm **USB Mouse HID**.
-- Binding mới:
-  - K keyboard
-  - C consumer/media
-  - M mouse
-  - S native script
-  - H Studio/host
-  - P profile
-  - D disabled
-- **PXS2 native script**: tối đa **512 actions/key**, 8192 bytes/key.
-- Native script hỗ trợ Text, Shortcut/Functional Key, Wait, Mouse Click, Wheel, Media, Change Profile và Profile Next/Previous.
-- Các action Windows-only tiếp tục chạy qua App Mode.
+Studio adds **Reset Touch** and **Touch Diagnostics**. Calibration requires: hold each target briefly, release fully, then move to the next target.
 
-### Studio 2.3
+### 25 profiles
 
-UI được viết lại theo workflow gần eezbotfun hơn:
+- 25 profiles × 8 keys.
+- migrates old 5-profile NVS config and schema-2/3 PC presets.
+- profile actions and Auto Profile support P1…P25.
+- physical LCD profile strip displays banks of five.
 
-- Profile & Key Selection bên trái.
-- Device List bên trái.
-- Action toolbox + Action Sequence + Parameters bên phải.
-- Drag/drop action.
-- Drag key → key để copy.
-- Drag profile → profile để copy.
-- **HID Mode / App Mode theo từng key**.
-- **SAVE KEY / SAVE PROFILE / SAVE TO DEVICE**.
-- tối đa 512 actions/key.
-- Dynamic / Auto Profile theo foreground Windows process.
-- key icon + RGB color.
-- Import/Export preset schema 3.
-- Light/Dark mode.
-- Display & Media / Auto Profile / Log tabs.
-- Auto screen-off: Always On, 30s, 5m, 15m.
-- PC Monitor, GIF, touch calibration và existing v2.2.1 USB handshake được giữ.
+### Studio 2.4
 
-### eezbotfun parity
+- 25-profile selector.
+- Profile & Key Selection + Device List left; Configuration right.
+- drag/drop actions and key/profile copy.
+- 512 actions/key.
+- HID Mode / App Mode per key.
+- SAVE KEY / SAVE PROFILE / SAVE TO DEVICE.
+- Import/Export full preset and individual Profile.
+- Auto Profile.
+- **Auto Sync PC ↔ device** via KEYHASH prompt.
+- Getting Started + HID explanation.
+- Power Off Computer.
+- USB Safe Mode behavior by design (no mass-storage interface).
+- PC Monitor, GIF, icons, RGB, auto screen-off retained.
 
-Đã đối chiếu public MIT project `eezbotfun/8-key-macropad` và đưa các workflow chính vào implementation riêng của PIXEL PRO 2.0.
+### Boot / USB / LCD
 
-Không tuyên bố 1:1 toàn bộ trong 2.3.0. Chưa có: simultaneous multi-device sessions, community preset gallery, SMTC Now Playing/album art, `cus` custom-display protocol và ESP-NOW wireless.
+Keeps stable HX8357-B timing and v2.3 fast-storage boot path. Native USB CDC/HID handshake fix is retained.
 
 ### Flash
 
-Full install/recovery:
+Use **PIXEL_PRO_2_merged.bin** at **0x000000** with ESP32-S2 / DIO / 40 MHz / 4 MB.
 
-- **PIXEL_PRO_2_merged.bin**
-- offset **0x000000**
-- ESP32-S2
-- DIO
-- 40 MHz
-- 4 MB
+After flashing, use the matching Studio 2.4 and run:
+1. Connect.
+2. Display & Media → Reset Touch.
+3. Touch Diagnostics ON and verify all four corners produce changing raw values.
+4. Touch Diagnostics OFF.
+5. Calibrate Touch: hold/release TL → TR → BR → BL.
 
-App-only **PIXEL_PRO_2_app.bin** ở **0x010000** chỉ khi thiết bị đã có partition v2.
-
-Sau full flash đầu tiên, v2.3 không format SPIFFS trong boot. Filesystem chỉ được tạo khi lần đầu upload GIF/icon/native script nếu cần.
-
-### Validation
-
-Release chỉ được tạo khi:
-
-- firmware model/source guards xanh,
-- actual ESP32-S2 compile xanh,
-- partition/merged verification xanh,
-- app protocol/model tests xanh,
-- real Studio 2.3 UI smoke xanh,
-- self-contained Windows publish/package xanh.
-
-Hardware vẫn cần user xác nhận touch sensitivity, boot perception và LCD/touch behavior trên panel thật.
+CI release requires model/source tests, real ESP32-S2 compile, merged image verification, app tests, UI smoke and self-contained Windows publish.
