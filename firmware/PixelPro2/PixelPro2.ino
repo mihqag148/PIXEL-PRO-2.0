@@ -229,6 +229,28 @@ bool validateScriptBytes(const uint8_t* d,size_t n) {
     } else if(type==8) {
       if(p>=n||d[p]<1||d[p]>2)return false;
       p++;
+    } else if(type==9) {
+      if(p+2>n)return false;
+      p+=2;
+    } else if(type==12) {
+      if(p+3>n)return false;
+      uint16_t delayMs=uint16_t(d[p]|(uint16_t(d[p+1])<<8));
+      p+=2;
+      if(delayMs>30000)return false;
+      uint8_t len=d[p++];
+      if(!len||p+len>n)return false;
+      for(uint8_t i=0;i<len;i++)if(d[p+i]<32||d[p+i]>126)return false;
+      p+=len;
+    } else if(type==13) {
+      if(p+4>n)return false;
+      uint16_t duration=uint16_t(d[p]|(uint16_t(d[p+1])<<8));
+      p+=2;
+      if(duration>30000)return false;
+      p++; // modifiers
+      uint8_t count=d[p++];
+      if(!count||count>6||p+count>n)return false;
+      for(uint8_t i=0;i<count;i++)if(d[p+i]<4||d[p+i]>115)return false;
+      p+=count;
     } else return false;
   }
   return p==n;
@@ -298,6 +320,32 @@ void runScript(uint32_t now) {
     } else if(type==8) {
       uint8_t ctrl=scriptData[scriptPos++];
       selectProfile((profile+(ctrl==1?1:Pixel::Profiles-1))%Pixel::Profiles);
+    } else if(type==9) {
+      int8_t x=int8_t(scriptData[scriptPos++]);
+      int8_t y=int8_t(scriptData[scriptPos++]);
+      mouse.move(x,y,0);
+    } else if(type==12) {
+      uint16_t charDelay=uint16_t(scriptData[scriptPos]|(uint16_t(scriptData[scriptPos+1])<<8));
+      scriptPos+=2;
+      uint8_t len=scriptData[scriptPos++];
+      for(uint8_t i=0;i<len;i++) {
+        keyboard.write(scriptData[scriptPos++]);
+        if(charDelay)delay(charDelay);
+      }
+      reportKeys();
+    } else if(type==13) {
+      uint16_t duration=uint16_t(scriptData[scriptPos]|(uint16_t(scriptData[scriptPos+1])<<8));
+      scriptPos+=2;
+      uint8_t modifiers=scriptData[scriptPos++];
+      uint8_t count=scriptData[scriptPos++];
+      KeyReport report{};
+      report.modifiers=modifiers;
+      for(uint8_t i=0;i<count;i++)report.keys[i]=scriptData[scriptPos++];
+      keyboard.sendReport(&report);
+      if(duration)delay(duration);
+      KeyReport empty{};
+      keyboard.sendReport(&empty);
+      reportKeys();
     }
   }
 }
