@@ -26,7 +26,7 @@ Nếu chỉ cập nhật app trên thiết bị đã có partition v2, chọn du
 python -m esptool --chip esp32s2 --port COM5 write-flash 0x0 PIXEL_PRO_2_merged.bin
 ```
 
-6. Nhấn RESET hoặc rút/cắm USB. Thiết bị có HID keyboard/consumer và cổng CDC. Chờ màn hình khởi động, thử A…H trong trình soạn thảo.
+6. Nhấn RESET hoặc rút/cắm USB. Thiết bị có HID keyboard/consumer và cổng CDC. Với v2.2.1, LCD phải blank đen trong lúc init rồi hiện giao diện ở **Hướng gốc**; Studio mở CDC theo thứ tự DTR→RTS. Chờ màn hình khởi động, thử A…H trong trình soạn thảo.
 7. Giải nén `PIXEL-PRO-2.0-Studio-win-x64.zip`, chạy `PixelPro2.exe`, chọn cổng và Kết nối.
 
 Hoặc sau khi cài esptool, chạy `python flash_firmware.py --port COM5` trong thư mục giải nén. Script kiểm tra SHA256 và tự chọn merged/offset 0x0.
