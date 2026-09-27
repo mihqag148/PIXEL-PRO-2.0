@@ -66,10 +66,15 @@ public sealed class PresetGalleryForm : Form {
     readonly CheckBox filterDuplicates=new(){Text="Filter Duplicated",AutoSize=true,Checked=true};
     readonly FlowLayoutPanel cards=new(){Dock=DockStyle.Fill,AutoScroll=true,Padding=new Padding(8)};
     readonly Action<ProfilePreset> apply;
+    readonly string languageCode;
 
-    public PresetGalleryForm(Action<ProfilePreset> applyPreset) {
+    public PresetGalleryForm(Action<ProfilePreset> applyPreset,string language="en") {
         apply=applyPreset;
-        Text="PIXEL PRO · Presets Gallery";
+        languageCode=language;
+        Text=languageCode=="vi"?"PIXEL PRO · Thư viện Preset":
+             languageCode=="zh"?"PIXEL PRO · 预设库":"PIXEL PRO · Presets Gallery";
+        search.PlaceholderText=UiText.Translate("Search presets...",languageCode);
+        filterDuplicates.Text=UiText.Translate("Filter Duplicated",languageCode);
         Size=new Size(880,650);
         MinimumSize=new Size(720,520);
         StartPosition=FormStartPosition.CenterParent;
@@ -81,15 +86,15 @@ public sealed class PresetGalleryForm : Form {
 
         var tools=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
         tools.Controls.Add(search);
-        category.Items.Add("All");
-        category.Items.Add("Local");
+        category.Items.Add(UiText.Translate("All",languageCode));
+        category.Items.Add(UiText.Translate("Local",languageCode));
         foreach(var c in PresetGallery.BuiltIns.Select(x=>x.Category).Distinct().Order())
             category.Items.Add(c);
         category.SelectedIndex=0;
         tools.Controls.Add(category);
         tools.Controls.Add(filterDuplicates);
 
-        var folder=new Button{Text="Open Presets Folder",AutoSize=true,Height=30};
+        var folder=new Button{Text=UiText.Translate("Open Presets Folder",languageCode),AutoSize=true,Height=30};
         folder.Click+=(_,_)=>{
             PresetGallery.EnsureFolder();
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
@@ -97,12 +102,12 @@ public sealed class PresetGalleryForm : Form {
         };
         tools.Controls.Add(folder);
 
-        var online=new Button{Text="Open Community Gallery",AutoSize=true,Height=30};
+        var online=new Button{Text=UiText.Translate("Open Community Gallery",languageCode),AutoSize=true,Height=30};
         online.Click+=(_,_)=>System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
             "https://www.eezbotfun.com/en/files"){UseShellExecute=true});
         tools.Controls.Add(online);
 
-        var import=new Button{Text="Import Downloaded",AutoSize=true,Height=30};
+        var import=new Button{Text=UiText.Translate("Import Downloaded",languageCode),AutoSize=true,Height=30};
         import.Click+=(_,_)=>{
             using var dialog=new OpenFileDialog{Filter="PIXEL PRO profile|*.profile.json;*.json"};
             if(dialog.ShowDialog()==DialogResult.OK){
@@ -129,9 +134,11 @@ public sealed class PresetGalleryForm : Form {
         cards.SuspendLayout();
         cards.Controls.Clear();
         string q=search.Text.Trim();
-        string cat=category.SelectedItem?.ToString()??"All";
+        string cat=category.SelectedItem?.ToString()??UiText.Translate("All",languageCode);
+        string allLabel=UiText.Translate("All",languageCode);
+        string localLabel=UiText.Translate("Local",languageCode);
         IEnumerable<BuiltInPreset> items=PresetGallery.BuiltIns;
-        if(cat!="All")items=items.Where(x=>x.Category==cat);
+        if(cat!=allLabel&&cat!=localLabel)items=items.Where(x=>x.Category==cat);
         if(q.Length>0)items=items.Where(x=>
             x.Name.Contains(q,StringComparison.OrdinalIgnoreCase)||
             x.Category.Contains(q,StringComparison.OrdinalIgnoreCase)||
@@ -140,12 +147,12 @@ public sealed class PresetGalleryForm : Form {
 
         foreach(var local in PresetGallery.LocalFiles()) {
             if(q.Length>0&&!local.Name.Contains(q,StringComparison.OrdinalIgnoreCase))continue;
-            if(cat!="All"&&cat!="Local")continue;
+            if(cat!=allLabel&&cat!=localLabel)continue;
             var localCard=new Panel{Width=250,Height=128,Margin=new Padding(8),BorderStyle=BorderStyle.FixedSingle,Padding=new Padding(10)};
             localCard.Controls.Add(new Label{Text=local.Name,AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),Location=new Point(10,10)});
-            localCard.Controls.Add(new Label{Text="Local",AutoSize=true,ForeColor=Color.DimGray,Location=new Point(10,36)});
+            localCard.Controls.Add(new Label{Text=localLabel,AutoSize=true,ForeColor=Color.DimGray,Location=new Point(10,36)});
             localCard.Controls.Add(new Label{Text="AppData preset",AutoSize=false,Size=new Size(225,34),Location=new Point(10,58)});
-            var useLocal=new Button{Text="Add Preset",Width=100,Height=27,Location=new Point(138,94)};
+            var useLocal=new Button{Text=UiText.Translate("Add Preset",languageCode),Width=100,Height=27,Location=new Point(138,94)};
             string localPath=local.Path;
             useLocal.Click+=(_,_)=>{apply(ProfilePreset.Load(localPath));DialogResult=DialogResult.OK;};
             localCard.Controls.Add(useLocal);
@@ -157,7 +164,7 @@ public sealed class PresetGalleryForm : Form {
             card.Controls.Add(new Label{Text=preset.Name,AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),Location=new Point(10,10)});
             card.Controls.Add(new Label{Text=preset.Category,AutoSize=true,ForeColor=Color.DimGray,Location=new Point(10,36)});
             card.Controls.Add(new Label{Text=preset.Description,AutoSize=false,Size=new Size(225,34),Location=new Point(10,58)});
-            var use=new Button{Text="Add Preset",Width=100,Height=27,Location=new Point(138,94)};
+            var use=new Button{Text=UiText.Translate("Add Preset",languageCode),Width=100,Height=27,Location=new Point(138,94)};
             use.Click+=(_,_)=>{apply(preset.Profile);DialogResult=DialogResult.OK;};
             card.Controls.Add(use);
             cards.Controls.Add(card);
