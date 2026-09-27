@@ -1,60 +1,101 @@
-# PIXELPRO2 CDC protocol 2.2.1
+# PIXELPRO2 CDC protocol 2.3
 
-Control channel uses ASCII newline framing. Host sends `id|COMMAND|...`; firmware replies `R|id|OK|payload` or `R|id|ERR|reason`. Asynchronous events begin with `E|`. Studio 2.2.1 asserts DTR first, then RTS. Firmware disables USBCDC reboot sequencing and does not gate protocol replies on `USBCDC::operator bool()`; the underlying TinyUSB write path decides whether the CDC endpoint is actually connected.
+Control channel uses ASCII newline framing. Host sends `id|COMMAND|...`; firmware replies `R|id|OK|payload` or `R|id|ERR|reason`. Asynchronous events begin with `E|`.
+
+Studio asserts DTR first, then RTS. Firmware disables native-USBCDC reboot sequencing and does not gate replies on `USBCDC::operator bool()`.
 
 | Request | Payload |
 |---|---|
-| HELLO | `PIXELPRO2|2.2.1|5|8|HX8357B|caps` |
-| STATE | active profile, brightness, saver seconds |
+| HELLO | `PIXELPRO2|2.3.0|5|8|HX8357B|caps` |
+| STATE | active profile, brightness, saver seconds, screen-off seconds |
 | GET\|p\|k | type, code, modifiers, RGB565, label |
 | SET\|p\|k\|type\|code\|modifiers\|color\|label | SET |
 | PROFILE\|p | select profile 0…4 |
 | RGB\|0…80 | LED brightness |
-| SAVE | persist keymap/RGB to NVS |
+| SAVE | persist keymap/RGB |
 | PANEL | display orientation 0…3 |
 | DISPLAY\|mode | persist orientation |
-| SAVER\|seconds | idle timeout; 0 disables |
+| SAVER\|seconds | screensaver idle timeout; 0 disables |
+| SCREENOFF\|seconds | 0 / 30 / 300 / 900 |
 | TOUCHCAL\|START | start four-point calibration |
 | TOUCHCAL\|GET | raw calibration endpoints |
-| SDINFO | ABSENT or READY + MiB |
+| SDINFO | lazily probe SD; ABSENT or READY + MiB |
 | MEDIA\|INFO | screensaver status |
-| MEDIA\|DELETE | remove screensaver |
-| MEDIA\|BEGIN\|size\|crc32 | begin raw screensaver transfer |
-| ICON\|DELETE\|p\|k | remove key icon |
-| ICON\|BEGIN\|p\|k\|size\|crc32 | begin raw icon transfer |
-| MONITOR\|SET\|cpu\|gpu\|ram\|disk\|netKbps\|cpuTempC\|gpuTempC | render/update PC monitor fullscreen |
-| MONITOR\|OFF | leave PC monitor and restore key UI |
+| MEDIA\|DELETE | delete screensaver |
+| MEDIA\|BEGIN\|size\|crc32 | start screensaver transfer |
+| ICON\|DELETE\|p\|k | delete key icon |
+| ICON\|BEGIN\|p\|k\|size\|crc32 | start icon transfer |
+| SCRIPT\|DELETE\|p\|k | delete native HID script |
+| SCRIPT\|BEGIN\|p\|k\|size\|crc32 | start PXS2 native-script transfer |
+| MONITOR\|SET\|cpu\|gpu\|ram\|disk\|netKbps\|cpuTempC\|gpuTempC | render/update PC monitor |
+| MONITOR\|OFF | leave PC monitor |
 
-Events: `E|KEY|k|0/1`, `E|HOST|p|k`, `E|PROFILE|p`, `E|TOUCH|x|y`, `E|CALDONE|...`, `E|CALFAIL|...`, `E|MEDIAACK|received`, `E|MEDIADONE|OK/reason`.
+Events include:
 
-## Binary transfer
+- `E|KEY|k|0/1`
+- `E|HOST|p|k`
+- `E|PROFILE|p`
+- `E|TOUCH|x|y|pressure`
+- `E|CALDONE|...`
+- `E|CALFAIL|...`
+- `E|SCRIPTERR|reason`
+- `E|MEDIAACK|received`
+- `E|MEDIADONE|OK/reason`
 
-After a successful MEDIA/ICON BEGIN reply (`READY|512`), the host sends raw bytes in chunks up to 512 bytes. Firmware pauses LCD/touch work during transfer, writes the chunk to SPIFFS, updates CRC32 and emits a cumulative `MEDIAACK`. Final data is validated before an atomic rename from `/upload.tmp`.
+## Binary transport
 
-Screensaver package `PXG1`:
-- 4 bytes magic
-- little-endian uint16 width, height, frame count, delay ms
+MEDIA / ICON / SCRIPT BEGIN returns `READY|512`. Host then sends raw bytes in chunks up to 512 bytes. Firmware emits a cumulative `MEDIAACK` and validates CRC32 before atomically renaming `/upload.tmp`.
+
+CRC32 polynomial: `0xEDB88320`.
+
+### PXG1 screensaver
+
+- magic: `PXG1`
+- uint16 LE width, height, frame count, frame delay ms
 - RGB332 frame bytes
-- Studio currently emits 160×106 frames, <=1.8 MB
+- current Studio output: 160×106, up to 1.8 MB
 
-Icon package `PXI1`:
-- 4 bytes magic
-- little-endian uint16 width, height
+### PXI1 icon
+
+- magic: `PXI1`
+- uint16 LE width, height
 - RGB332 pixels
-- currently fixed to 48×48
+- current size 48×48
 
-CRC32 uses polynomial 0xEDB88320.
+### PXS2 native HID script
 
-## Key types
+- bytes 0…3: ASCII `PXS2`
+- bytes 4…5: uint16 LE action count
+- action records follow
+- max **512 actions**
+- max **8192 bytes**
+- stored as `/s<profile><key>.pxs`
 
-- K: USB keyboard usage 4…115, modifier mask 0…255.
-- C: consumer codes 181, 182, 183, 205, 226, 233, 234.
-- H: host action; physical press generates `E|HOST|profile|key`.
-- P: switch profile 0…4.
-- D: disabled.
+Current PXS2 action opcodes:
 
-Host macros are never sent from an arbitrary serial command. Studio resolves H actions from its local preset only when **Cho phép macro trên PC này** is enabled.
+1. Text: uint8 length + ASCII bytes
+2. Shortcut/functional key: modifier byte + count + HID usages
+3. Wait: uint16 milliseconds
+4. Mouse click
+5. Mouse wheel
+6. Consumer/media usage
+7. Select profile
+8. Profile next/previous
 
-## PC monitor
+## Key binding types
 
-`MONITOR|SET` accepts CPU/GPU/RAM/disk percentages 0…100, network 0…9999 kbps, and CPU/GPU temperatures 0…125 °C. Temperature 0 means unavailable and is rendered as `--C`. The firmware keeps HID scanning active while the full-screen dashboard is visible. `MONITOR|OFF` restores the normal key tiles.
+- **K**: native keyboard HID, usage 4…115 + modifier mask.
+- **C**: native consumer/media HID.
+- **M**: native mouse HID: left/right/middle/double-left/wheel ±.
+- **S**: native PXS2 script stored in SPIFFS.
+- **H**: Studio/host action; physical press emits `E|HOST|profile|key`.
+- **P**: select profile 0…4.
+- **D**: disabled.
+
+## Touch
+
+Calibration is done with the panel temporarily in orientation 0. Raw endpoints are mapped back to target coordinates x=24/455 and y=24/295, then extrapolated/constrained to 480×320 and finally passed through the selected orientation transform. Touch events include the filtered pressure score for diagnostics.
+
+## Auto screen-off
+
+`SCREENOFF` controls the HX8357-B display state only. It does not disable USB HID/CDC. Key, touch or roller activity calls the normal user-activity path and turns the panel back on.
