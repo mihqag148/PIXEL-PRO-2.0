@@ -122,8 +122,8 @@ public static class MediaCodec {
                     break;
                 }
                 case "ChangeProfile": {
-                    if(!int.TryParse(value,out int profile)||profile is <1 or >5)
-                        throw new FormatException("ChangeProfile dùng 1..5.");
+                    if(!int.TryParse(value,out int profile)||profile is <1 or >DeviceLimits.Profiles)
+                        throw new FormatException($"ChangeProfile dùng 1..{DeviceLimits.Profiles}.");
                     writer.Write((byte)7);writer.Write((byte)(profile-1));
                     break;
                 }
