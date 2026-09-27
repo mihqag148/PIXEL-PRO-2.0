@@ -7,6 +7,9 @@ public sealed class StudioForm : Form {
     sealed record ActionDef(string Name,string Type,string DefaultValue,string Hint,bool HidCapable);
     sealed record KeyDrag(int Profile,int Key);
     sealed record ProfileDrag(int Profile);
+    sealed record DeviceEntry(string Port,bool Connected) {
+        public override string ToString()=>Connected?$"{Port}    Connected":$"{Port}    Available";
+    }
     sealed class StepItem {
         public Step Step { get; }
         public StepItem(Step step){Step=step;}
@@ -31,7 +34,7 @@ public sealed class StudioForm : Form {
         new("Power Off Computer","PowerOff","","Windows host action. Requires Studio.",false)
     ];
 
-    readonly Device device=new();
+    readonly DeviceHub device=new();
     readonly MacroRunner runner=new();
     readonly CancellationTokenSource shutdown=new();
     readonly SystemMonitorCollector monitorCollector=new();
@@ -541,7 +544,17 @@ public sealed class StudioForm : Form {
             monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="PC Monitor: OFF";
             status.Text="Disconnected";
             Log(e);
+            RefreshPorts();
         });
+        device.Changed+=()=>OnUi(RefreshPorts);
+        deviceList.SelectedIndexChanged+=(_,_)=>{
+            if(loading)return;
+            if(deviceList.SelectedItem is DeviceEntry entry&&entry.Connected&&
+               !string.Equals(device.PortName,entry.Port,StringComparison.OrdinalIgnoreCase)) {
+                device.Activate(entry.Port);
+                Guard(AfterConnect);
+            }
+        };
 
         monitorTimer.Tick+=async (_,_)=>{
             if(!monitorEnabled||monitorSending||!device.Connected)return;
@@ -808,45 +821,57 @@ public sealed class StudioForm : Form {
     }
 
     void RefreshPorts() {
-        string? keep=deviceList.SelectedItem as string;
-        var ports=SerialPort.GetPortNames().Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        deviceList.Items.Clear();
-        foreach(var p in ports)deviceList.Items.Add(p);
-        if(keep!=null&&deviceList.Items.Contains(keep))deviceList.SelectedItem=keep;
-        else if(device.PortName!=null&&deviceList.Items.Contains(device.PortName))deviceList.SelectedItem=device.PortName;
-        else if(deviceList.Items.Count>0)deviceList.SelectedIndex=0;
+        string? keep=(deviceList.SelectedItem as DeviceEntry)?.Port??device.PortName;
+        var ports=SerialPort.GetPortNames()
+            .Union(device.ConnectedPorts,StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        loading=true;
+        try {
+            deviceList.Items.Clear();
+            foreach(var port in ports)deviceList.Items.Add(new DeviceEntry(port,device.IsConnected(port)));
+            var target=deviceList.Items.Cast<DeviceEntry>().FirstOrDefault(x=>
+                string.Equals(x.Port,keep,StringComparison.OrdinalIgnoreCase));
+            if(target!=null)deviceList.SelectedItem=target;
+            else if(deviceList.Items.Count>0)deviceList.SelectedIndex=0;
+        } finally {loading=false;}
     }
 
     async Task ConnectSelected() {
         SaveEditor();
-        if(deviceList.SelectedItem is not string port)throw new IOException("No COM port selected.");
-        await device.Connect(port);
+        if(deviceList.SelectedItem is not DeviceEntry entry)throw new IOException("No COM port selected.");
+        await device.Connect(entry.Port);
+        RefreshPorts();
         await AfterConnect();
     }
 
     async Task AutoConnect() {
         SaveEditor();
-        RefreshPorts();
         var ports=SerialPort.GetPortNames().Order(StringComparer.OrdinalIgnoreCase).ToArray();
         if(ports.Length==0)throw new IOException("Windows does not expose a COM port.");
         Exception? last=null;
+        int found=0;
         foreach(var port in ports) {
+            if(device.IsConnected(port)){found++;continue;}
             try {
-                status.Text=$"Trying {port}…";
+                status.Text=$"Probing {port}…";
                 await device.Connect(port);
-                deviceList.SelectedItem=port;
-                await AfterConnect();
-                return;
+                found++;
+                Log($"PIXEL PRO found on {port}");
             } catch(Exception ex) {
                 last=ex;Log($"{port}: {ex.Message}");
             }
         }
-        throw new IOException("PIXEL PRO 2.0 not found.",last);
+        RefreshPorts();
+        if(found==0)throw new IOException("PIXEL PRO 2.0 not found.",last);
+        await AfterConnect();
+        status.Text=$"{found} PIXEL PRO device(s) connected";
     }
 
     Task DisconnectDevice() {
         monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="PC Monitor: OFF";
-        device.Dispose();status.Text="Disconnected";
+        device.DisconnectActive();
+        RefreshPorts();
+        status.Text=device.Connected?$"Active device: {device.PortName}":"Disconnected";
         return Task.CompletedTask;
     }
 
