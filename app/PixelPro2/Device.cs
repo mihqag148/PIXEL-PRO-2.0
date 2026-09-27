@@ -134,7 +134,7 @@ public sealed class Device : IDisposable {
         UploadBinary($"MEDIA|BEGIN|{data.Length}|{Crc32(data)}",data,12,1_900_000,progress,token);
 
     public Task UploadScript(int profile,int key,byte[] data,IProgress<int>? progress=null,CancellationToken token=default) {
-        if(profile is <0 or >4||key is <0 or >7)throw new ArgumentOutOfRangeException();
+        if(profile is <0 or >=DeviceLimits.Profiles||key is <0 or >=DeviceLimits.Keys)throw new ArgumentOutOfRangeException();
         return UploadBinary($"SCRIPT|BEGIN|{profile}|{key}|{data.Length}|{Crc32(data)}",data,7,8192,progress,token);
     }
 
