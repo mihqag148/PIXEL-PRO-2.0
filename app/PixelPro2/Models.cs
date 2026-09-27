@@ -62,7 +62,7 @@ public sealed class Binding {
         };
         if(!valid) throw new FormatException("Loại hành động, mã hoặc modifier không hợp lệ.");
 
-        if(Steps is null||Steps.Count>64) throw new FormatException("Macro tối đa 64 bước.");
+        if(Steps is null||Steps.Count>512) throw new FormatException("Macro tối đa 512 bước.");
         foreach(var s in Steps) {
             if(s is null||s.Value is null||s.Value.Length>4096)
                 throw new FormatException("Bước macro quá dài.");
