@@ -42,6 +42,7 @@ public sealed class StudioForm : Form {
     readonly CancellationTokenSource shutdown=new();
     readonly SystemMonitorCollector monitorCollector=new();
     readonly MusicPlugin musicPlugin=new();
+    readonly StudioSettings settings=StudioSettings.Load();
 
     Preset preset=new();
     int currentProfile,currentKey,activeProfile;
@@ -163,16 +164,20 @@ public sealed class StudioForm : Form {
         RefreshPorts();
         LoadEditor();
         CaptureLanguageBase(this);
-        if(File.Exists(languagePath)) {
+        languageCode=settings.Language;
+        if(languageCode=="en"&&File.Exists(languagePath)) {
             string saved=File.ReadAllText(languagePath).Trim().ToLowerInvariant();
             if(saved is "vi" or "zh")languageCode=saved;
         }
         loading=true;
         language.SelectedIndex=languageCode=="vi"?1:languageCode=="zh"?2:0;
+        monitorPluginToggle.Checked=settings.PcMonitorPlugin;
+        musicPluginToggle.Checked=settings.MusicPlugin;
         loading=false;
         ApplyLanguage();
         autoProfileTimer.Start();
-        ApplyTheme(false);
+        ApplyTheme(settings.DarkTheme);
+        UpdatePluginStatus();
     }
 
     Control BuildHeader() {
@@ -199,7 +204,9 @@ public sealed class StudioForm : Form {
         tools.Controls.Add(MakeButton("Export Profile",ExportProfile));
         tools.Controls.Add(MakeButton("Presets",OpenPresetGallery));
         tools.Controls.Add(MakeButton("Firmware",OpenFirmwarePage));
-        tools.Controls.Add(MakeButton("Light / Dark",()=>{dark=!dark;ApplyTheme(dark);return Task.CompletedTask;}));
+        tools.Controls.Add(MakeButton("Light / Dark",()=>{
+            dark=!dark;ApplyTheme(dark);settings.DarkTheme=dark;settings.Save();return Task.CompletedTask;
+        }));
         tools.Controls.Add(language);
         panel.Controls.Add(tools);
         return panel;
@@ -312,7 +319,7 @@ public sealed class StudioForm : Form {
         menu.Items.Add("Set RGB backlight",null,(_,_)=>Guard(ChooseDeviceBrightness));
         menu.Items.Add("Sync configuration to device",null,(_,_)=>Guard(UploadAll));
         menu.Items.Add("Read configuration to computer",null,(_,_)=>Guard(ReadDevice));
-        menu.Items.Add("Switch theme",null,(_,_)=>{dark=!dark;ApplyTheme(dark);});
+        menu.Items.Add("Switch theme",null,(_,_)=>{dark=!dark;ApplyTheme(dark);settings.DarkTheme=dark;settings.Save();});
         menu.Items.Add("Upgrade firmware",null,(_,_)=>Guard(OpenFirmwarePage));
         var pairing=menu.Items.Add("Clear pairing information");
         pairing.Enabled=false;
@@ -484,10 +491,11 @@ public sealed class StudioForm : Form {
     };
 
     Control BuildPlugins() {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(14)};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,ColumnCount=1,Padding=new Padding(14)};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,110));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,110));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,96));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
         root.Controls.Add(new Label{
@@ -518,10 +526,21 @@ public sealed class StudioForm : Form {
         musicBox.Controls.Add(musicFlow);
         root.Controls.Add(musicBox,0,2);
 
+        var safeBox=new GroupBox{Text="Safe Mode",Dock=DockStyle.Fill,Padding=new Padding(12)};
+        var safeFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
+        var safeMode=new CheckBox{Text="Safe Mode (USB mass storage hidden)",Checked=true,Enabled=false,AutoSize=true};
+        safeFlow.Controls.Add(safeMode);
+        safeFlow.Controls.Add(new Label{
+            AutoSize=true,ForeColor=Color.DimGray,
+            Text="Always ON on PIXEL PRO 2.0: firmware exposes HID + CDC only, never USB mass storage."
+        });
+        safeBox.Controls.Add(safeFlow);
+        root.Controls.Add(safeBox,0,3);
+
         root.Controls.Add(new Label{
             Dock=DockStyle.Fill,AutoSize=false,ForeColor=Color.DimGray,
             Text="Plugin status is also shown in the bottom bar. Enabling one display plugin replaces the other full-screen plugin on the active device; HID keys continue working."
-        },0,3);
+        },0,4);
         return root;
     }
 
@@ -649,10 +668,16 @@ public sealed class StudioForm : Form {
         };
         monitorPluginToggle.CheckedChanged+=(_,_)=>{
             if(loading)return;
+            settings.PcMonitorPlugin=monitorPluginToggle.Checked;
+            if(monitorPluginToggle.Checked)settings.MusicPlugin=false;
+            settings.Save();
             Guard(()=>SetMonitorEnabled(monitorPluginToggle.Checked));
         };
         musicPluginToggle.CheckedChanged+=(_,_)=>{
             if(loading)return;
+            settings.MusicPlugin=musicPluginToggle.Checked;
+            if(musicPluginToggle.Checked)settings.PcMonitorPlugin=false;
+            settings.Save();
             Guard(()=>SetMusicEnabled(musicPluginToggle.Checked));
         };
         language.SelectedIndexChanged+=(_,_)=>{
@@ -660,6 +685,7 @@ public sealed class StudioForm : Form {
             languageCode=language.SelectedIndex switch {1=>"vi",2=>"zh",_=>"en"};
             Directory.CreateDirectory(Path.GetDirectoryName(languagePath)!);
             File.WriteAllText(languagePath,languageCode);
+            settings.Language=languageCode;settings.Save();
             ApplyLanguage();
         };
 
@@ -1043,6 +1069,8 @@ public sealed class StudioForm : Form {
         status.Text=$"Connected {device.PortName} · PIXEL PRO 2.0";
         Log($"Handshake OK on {device.PortName}");
         await CheckAutoSync();
+        if(settings.PcMonitorPlugin&&!monitorEnabled)await SetMonitorEnabled(true);
+        else if(settings.MusicPlugin&&!musicEnabled)await SetMusicEnabled(true);
     }
 
     async Task CheckAutoSync() {
