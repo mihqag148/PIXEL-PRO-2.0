@@ -3,6 +3,7 @@
 #include "../firmware/PixelPro2/Model.h"
 #include "../firmware/PixelPro2/DisplayMode.h"
 int main() {
+  static_assert(Pixel::Profiles==25);
   assert(Pixel::displayMadctl(0)==0x68);
   assert(Pixel::displayMadctl(1)==0xA8);
   assert(Pixel::displayMadctl(2)==0xE8);
@@ -23,13 +24,14 @@ int main() {
   assert(!d.update(true,19));assert(d.update(true,20)&&d.stable);
   d.since=0xFFFFFFFA;d.candidate=false;assert(d.update(false,8)&&!d.stable);
   Pixel::Binding key{'K',4,1,0,"Copy"};assert(Pixel::valid(key));
-  key.code=65535;assert(!Pixel::valid(key));key.type='P';key.code=5;key.modifiers=0;assert(!Pixel::valid(key));
-  key.code=4;assert(Pixel::valid(key));
+  key.code=65535;assert(!Pixel::valid(key));key.type='P';key.code=25;key.modifiers=0;assert(!Pixel::valid(key));
+  key.code=24;assert(Pixel::valid(key));
+  key.type='K';key.code=4;key.modifiers=1;assert(Pixel::valid(key));
   key.type='M';key.code=1;key.modifiers=0;assert(Pixel::valid(key));
   key.code=7;assert(!Pixel::valid(key));
   key.type='S';key.code=0;assert(Pixel::valid(key));
   key.code=1;assert(!Pixel::valid(key));
-  key.type='P';key.code=4;assert(Pixel::valid(key));
+  key.type='P';key.code=24;key.modifiers=0;assert(Pixel::valid(key));
   strcpy(key.label,"bad|label");assert(!Pixel::valid(key));
   std::cout<<"Model tests passed\n";
 }
