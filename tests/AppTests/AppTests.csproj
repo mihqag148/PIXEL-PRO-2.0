@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="../../app/PixelPro2/Models.cs" Link="Models.cs" />
     <Compile Include="../../app/PixelPro2/MediaCodec.cs" Link="MediaCodec.cs" />
+    <Compile Include="../../app/PixelPro2/PluginProtocol.cs" Link="PluginProtocol.cs" />
   </ItemGroup>
 </Project>
