@@ -97,7 +97,7 @@ A full merged flash leaves the SPIFFS partition blank. Older builds used `SPIFFS
 - mounts SPIFFS without auto-format at boot,
 - formats only on the first upload if needed,
 - probes optional SD only when requested,
-- shortens HX8357-B startup waits while retaining the required Sleep-Out delay.
+- keeps the proven v2.2.1 HX8357-B reset / Sleep-Out / Display-On timing; boot improvement comes from avoiding automatic SPIFFS format and lazy SD probing.
 
 ## Display / Media
 
