@@ -42,6 +42,8 @@ public:
   }
 
   void orientation(uint8_t mode){reg(0x36,{Pixel::displayMadctl(mode)});}
+  void displayOff(){reg(0x28);}
+  void displayOn(){reg(0x29);}
 
   void begin(uint8_t mode) {
     restore();
