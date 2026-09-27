@@ -1010,7 +1010,7 @@ void request(char* line) {
     ok("SAVER");return;
   }
   if(cmd=="MUSIC"&&n==6&&strcmp(tokens[2],"SET")==0&&
-     Pixel::number(tokens[3],1,v)&&Pixel::text(tokens[4],48)&&Pixel::text(tokens[5],48)) {
+     Pixel::number(tokens[3],1,v)&&strlen(tokens[4])<=48&&strlen(tokens[5])<=48) {
     if(calibrating||upload.active){error("BUSY");return;}
     stopSaver();
     monitorActive=false;
