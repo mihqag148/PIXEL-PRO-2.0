@@ -177,6 +177,7 @@ public sealed class StudioForm : Form {
         tools.Controls.Add(MakeButton("Export",ExportPreset));
         tools.Controls.Add(MakeButton("Import Profile",ImportProfile));
         tools.Controls.Add(MakeButton("Export Profile",ExportProfile));
+        tools.Controls.Add(MakeButton("Presets",OpenPresetGallery));
         tools.Controls.Add(MakeButton("Firmware",OpenFirmwarePage));
         tools.Controls.Add(MakeButton("Light / Dark",()=>{dark=!dark;ApplyTheme(dark);return Task.CompletedTask;}));
         panel.Controls.Add(tools);
@@ -362,14 +363,8 @@ public sealed class StudioForm : Form {
     Control BuildKeyEditor() {
         var split=new SplitContainer{
             Dock=DockStyle.Fill,Orientation=Orientation.Vertical,
-            SplitterDistance=245,FixedPanel=FixedPanel.Panel1
+            SplitterDistance=650,FixedPanel=FixedPanel.Panel2
         };
-
-        var actionsBox=new GroupBox{Text="Actions · drag to sequence",Dock=DockStyle.Fill,Padding=new Padding(8)};
-        foreach(var action in ActionCatalog)toolbox.Items.Add(action);
-        toolbox.DisplayMember=nameof(ActionDef.Name);
-        actionsBox.Controls.Add(toolbox);
-        split.Panel1.Controls.Add(actionsBox);
 
         var right=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1};
         right.RowStyles.Add(new RowStyle(SizeType.Absolute,86));
@@ -422,9 +417,40 @@ public sealed class StudioForm : Form {
         saveRow.Controls.Add(MakeButton("Save Draft",()=>{SaveEditor();SaveLocal();return Task.CompletedTask;}));
         right.Controls.Add(saveRow,0,3);
 
-        split.Panel2.Controls.Add(right);
+        split.Panel1.Controls.Add(right);
+
+        var actionsBox=new GroupBox{Text="Actions",Dock=DockStyle.Fill,Padding=new Padding(8)};
+        var palette=new FlowLayoutPanel{
+            Dock=DockStyle.Fill,AutoScroll=true,Padding=new Padding(6),
+            FlowDirection=FlowDirection.LeftToRight,WrapContents=true
+        };
+        foreach(var action in ActionCatalog) {
+            var card=new Button{
+                Width=128,Height=62,Margin=new Padding(5),
+                Text=ActionGlyph(action.Type)+"\n"+action.Name,
+                TextAlign=ContentAlignment.MiddleCenter,
+                FlatStyle=FlatStyle.Flat,Tag=action,
+                Font=new Font("Segoe UI",9,FontStyle.Regular)
+            };
+            card.FlatAppearance.BorderColor=Color.FromArgb(210,214,220);
+            card.MouseDown+=(_,e)=>{
+                if(e.Button==MouseButtons.Left&&card.Tag is ActionDef def)
+                    card.DoDragDrop(def,DragDropEffects.Copy);
+            };
+            card.DoubleClick+=(_,_)=>{if(card.Tag is ActionDef def)AddAction(def);};
+            palette.Controls.Add(card);
+        }
+        actionsBox.Controls.Add(palette);
+        split.Panel2.Controls.Add(actionsBox);
         return split;
     }
+
+    static string ActionGlyph(string type)=>type switch {
+        "Website"=>"🌐","LaunchApp"=>"▶","OpenFolder"=>"📁","OpenFile"=>"📄",
+        "Text"=>"T","Shortcut"=>"⌨","Delay"=>"⏱","MouseMove"=>"↔",
+        "MouseClick"=>"🖱","Wheel"=>"↕","Media"=>"⏯","ChangeProfile"=>"▣",
+        "FunctionalKey"=>"Fn","DeviceCtrl"=>"⚙","PowerOff"=>"⏻",_=>"＋"
+    };
 
     Control BuildPlugins() {
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(14)};
@@ -1075,6 +1101,20 @@ public sealed class StudioForm : Form {
         transfer.Value=100;
         status.Text="Configuration synced to device";
         RefreshTiles();
+    }
+
+    Task OpenPresetGallery() {
+        SaveEditor();
+        using var gallery=new PresetGalleryForm(profile=>{
+            for(int k=0;k<DeviceLimits.Keys;k++)
+                preset.Profiles[currentProfile][k]=CloneBinding(profile.Keys[k]);
+            currentKey=0;
+            LoadEditor();
+            SaveLocal();
+            status.Text=$"Preset added to Profile {currentProfile+1} · sync when ready";
+        });
+        gallery.ShowDialog(this);
+        return Task.CompletedTask;
     }
 
     Task ImportPreset() {
