@@ -22,7 +22,10 @@ public sealed class MainForm : Form {
     readonly TextBox log=new(){Multiline=true,ReadOnly=true,Dock=DockStyle.Fill,ScrollBars=ScrollBars.Vertical};
     readonly Label status=new(){Text="Chưa kết nối · Có thể soạn preset offline",AutoSize=true,Padding=new Padding(8)};
     readonly Label mediaInfo=new(){Text="Screensaver: chưa đọc",AutoSize=true,Padding=new Padding(6)};
+    readonly Label monitorInfo=new(){Text="Monitor: OFF",AutoSize=true,Padding=new Padding(6)};
     readonly CheckBox armed=new(){Text="Cho phép macro trên PC này",AutoSize=true};
+    readonly System.Windows.Forms.Timer monitorTimer=new(){Interval=1000};
+    readonly SystemMonitorCollector monitorCollector=new();
     readonly ProgressBar transfer=new(){Width=150,Height=23,Minimum=0,Maximum=100};
     readonly Button[] tiles=new Button[8];
     readonly FlowLayoutPanel controls=new(){Dock=DockStyle.Top,AutoSize=true,WrapContents=true,Padding=new Padding(8)};
@@ -33,7 +36,7 @@ public sealed class MainForm : Form {
         "PixelPro2","preset.json");
 
     int currentProfile,currentKey;
-    bool loading,busy;
+    bool loading,busy,monitorEnabled,monitorSending;
 
     public MainForm() {
         Text="PIXEL PRO 2.0 · Studio 2.1";
@@ -60,6 +63,7 @@ public sealed class MainForm : Form {
         Button(controls,"Tự tìm phím",AutoConnect);
         Button(controls,"Kết nối",Connect);
         Button(controls,"Ngắt",()=>{
+            monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="Monitor: OFF";
             device.Dispose();armed.Checked=false;
             status.Text="Đã ngắt kết nối";
             return Task.CompletedTask;
@@ -94,6 +98,8 @@ public sealed class MainForm : Form {
         Button(controls,"Xóa GIF",DeleteGif);
         Button(controls,"Tải icon phím",UploadIcon);
         Button(controls,"Xóa icon phím",DeleteIcon);
+        Button(controls,"PC Monitor",ToggleMonitor);
+        controls.Controls.Add(monitorInfo);
         controls.Controls.Add(transfer);
         controls.Controls.Add(mediaInfo);
         controls.Controls.Add(status);
@@ -200,10 +206,21 @@ public sealed class MainForm : Form {
 
         device.Event+=e=>OnUi(()=>HandleEvent(e));
         device.Disconnected+=e=>OnUi(()=>{
+            monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="Monitor: OFF";
             armed.Checked=false;
             status.Text="Mất kết nối";
             Log(e);
         });
+
+        monitorTimer.Tick+=async (_,_)=>{
+            if(!monitorEnabled||monitorSending||!device.Connected)return;
+            monitorSending=true;
+            try{await SendMonitorFrame();}
+            catch(Exception ex){
+                monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="Monitor: lỗi";
+                Log("MONITOR: "+ex.Message);
+            }finally{monitorSending=false;}
+        };
 
         tray.DoubleClick+=(_,_)=>{
             Show();WindowState=FormWindowState.Normal;Activate();tray.Visible=false;
@@ -219,6 +236,7 @@ public sealed class MainForm : Form {
                 if(MessageBox.Show(ex.Message+"\nThoát và bỏ thay đổi?","PIXEL PRO",
                    MessageBoxButtons.YesNo)!=DialogResult.Yes){e.Cancel=true;return;}
             }
+            monitorEnabled=false;monitorTimer.Stop();monitorTimer.Dispose();
             shutdown.Cancel();device.Dispose();tray.Dispose();
         };
 
@@ -423,6 +441,28 @@ public sealed class MainForm : Form {
         };
         if(dialog.ShowDialog()==DialogResult.OK)preset.Save(dialog.FileName);
         return Task.CompletedTask;
+    }
+
+    async Task ToggleMonitor() {
+        if(monitorEnabled) {
+            monitorEnabled=false;
+            monitorTimer.Stop();
+            if(device.Connected)await device.Request("MONITOR|OFF");
+            monitorInfo.Text="Monitor: OFF";
+            status.Text="Đã trở về giao diện phím";
+            return;
+        }
+        if(!device.Connected)throw new IOException("Kết nối PIXEL PRO trước khi bật PC Monitor.");
+        monitorEnabled=true;
+        await SendMonitorFrame();
+        monitorTimer.Start();
+        status.Text="PC Monitor fullscreen đang chạy";
+    }
+
+    async Task SendMonitorFrame() {
+        var s=monitorCollector.Read();
+        await device.Request($"MONITOR|SET|{s.CpuPercent}|{s.GpuPercent}|{s.RamPercent}|{s.DiskPercent}|{s.NetKbps}");
+        monitorInfo.Text=$"Monitor: CPU {s.CpuPercent}% · RAM {s.RamPercent}% · NET {s.NetKbps} kbps";
     }
 
     async Task CalibrateTouch() {
