@@ -71,6 +71,7 @@ uint32_t mediaNext=0;
 // Full-screen PC monitor
 bool monitorActive=false;
 uint8_t monitorCpu=0,monitorGpu=0,monitorRam=0,monitorDisk=0;
+uint8_t monitorCpuTemp=0,monitorGpuTemp=0;
 uint16_t monitorNet=0;
 
 void defaults() {
@@ -318,17 +319,21 @@ bool drawKeyIcon(uint8_t p,uint8_t k,int16_t x,int16_t y) {
   return true;
 }
 
-void drawMonitorMetric(const char* name,uint8_t value,int y,uint16_t color) {
+void drawMonitorMetric(const char* name,uint8_t value,uint8_t temp,int y,uint16_t color) {
   panel.setTextColor(0xFFFF);
   panel.setTextSize(2);
   panel.setCursor(24,y);
   panel.print(name);
-  panel.setCursor(365,y);
+  panel.setCursor(340,y);
   panel.print(value);
   panel.print("%");
-  panel.drawRect(120,y+2,220,18,0x7BEF);
-  panel.fillRect(122,y+4,216,14,0x1082);
-  int w=int(value)*212/100;
+  panel.setTextSize(1);
+  panel.setCursor(410,y+5);
+  if(temp){panel.print(temp);panel.print("C");}
+  else panel.print("--C");
+  panel.drawRect(120,y+2,205,18,0x7BEF);
+  panel.fillRect(122,y+4,201,14,0x1082);
+  int w=int(value)*197/100;
   if(w>0)panel.fillRect(124,y+5,w,12,color);
 }
 
@@ -341,10 +346,10 @@ void drawMonitorScreen() {
   panel.setTextSize(1);
   panel.setCursor(365,28);
   panel.print("PIXEL PRO 2.0");
-  drawMonitorMetric("CPU",monitorCpu,72,0x07E0);
-  drawMonitorMetric("GPU",monitorGpu,116,0xF81F);
-  drawMonitorMetric("RAM",monitorRam,160,0x07FF);
-  drawMonitorMetric("DISK",monitorDisk,204,0xFFE0);
+  drawMonitorMetric("CPU",monitorCpu,monitorCpuTemp,72,0x07E0);
+  drawMonitorMetric("GPU",monitorGpu,monitorGpuTemp,116,0xF81F);
+  drawMonitorMetric("RAM",monitorRam,0,160,0x07FF);
+  drawMonitorMetric("DISK",monitorDisk,0,204,0xFFE0);
   panel.setTextSize(2);
   panel.setTextColor(0xFFFF);
   panel.setCursor(24,254);
@@ -507,7 +512,7 @@ void request(char* line) {
 
   userActivity();
   String cmd=tokens[1];
-  uint32_t p=0,k=0,v=0,m=0,color=0;
+  uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
     ok("PIXELPRO2|2.1.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
@@ -537,13 +542,15 @@ void request(char* line) {
     ok("OFF");
     return;
   }
-  if(cmd=="MONITOR"&&n==8&&strcmp(tokens[2],"SET")==0&&
+  if(cmd=="MONITOR"&&n==10&&strcmp(tokens[2],"SET")==0&&
      Pixel::number(tokens[3],100,p)&&Pixel::number(tokens[4],100,k)&&
      Pixel::number(tokens[5],100,v)&&Pixel::number(tokens[6],100,m)&&
-     Pixel::number(tokens[7],9999,color)) {
+     Pixel::number(tokens[7],9999,color)&&Pixel::number(tokens[8],125,a)&&
+     Pixel::number(tokens[9],125,b)) {
     if(calibrating||upload.active){error("BUSY");return;}
     stopSaver();
     monitorCpu=p;monitorGpu=k;monitorRam=v;monitorDisk=m;monitorNet=color;
+    monitorCpuTemp=a;monitorGpuTemp=b;
     monitorActive=true;
     drawMonitorScreen();
     ok("MONITOR");
