@@ -94,9 +94,13 @@ public sealed class StudioForm : Form {
     readonly Dictionary<int,Image> iconPreviews=new();
     string languageCode="en";
 
+    readonly string appDataRoot=Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PixelPro2");
     readonly string localPath=Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PixelPro2","preset-v4.json");
+    string ExportsFolder=>Path.Combine(appDataRoot,"exports");
     readonly string legacyLocalPathV3=Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PixelPro2","preset-v3.json");
@@ -1130,10 +1134,12 @@ public sealed class StudioForm : Form {
     }
 
     Task DisconnectDevice() {
-        monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="PC Monitor: OFF";
         device.DisconnectActive();
         RefreshPorts();
+        monitorInfo.Text=monitorEnabled?"PC Monitor: enabled · waiting for device":"PC Monitor: OFF";
+        musicInfo.Text=musicEnabled?"Music Player: enabled · waiting for device":"Music Player: OFF";
         status.Text=device.Connected?$"Active device: {device.PortName}":"Disconnected";
+        UpdatePluginStatus();
         return Task.CompletedTask;
     }
 
@@ -1302,7 +1308,12 @@ public sealed class StudioForm : Form {
 
     Task ExportPreset() {
         SaveEditor();SaveRulesGrid();
-        using var dialog=new SaveFileDialog{Filter="PIXEL PRO preset|*.json",FileName="pixel-pro-2-preset.json"};
+        Directory.CreateDirectory(ExportsFolder);
+        using var dialog=new SaveFileDialog{
+            Filter="PIXEL PRO preset|*.json",
+            FileName="pixel-pro-2-preset.json",
+            InitialDirectory=ExportsFolder
+        };
         if(dialog.ShowDialog()==DialogResult.OK)preset.Save(dialog.FileName);
         return Task.CompletedTask;
     }
@@ -1327,9 +1338,11 @@ public sealed class StudioForm : Form {
         var document=new ProfilePreset {
             Keys=preset.Profiles[currentProfile].Select(CloneBinding).ToArray()
         };
+        Directory.CreateDirectory(ExportsFolder);
         using var dialog=new SaveFileDialog{
             Filter="PIXEL PRO profile|*.profile.json",
-            FileName=$"pixel-pro-2-profile-{currentProfile+1}.profile.json"
+            FileName=$"pixel-pro-2-profile-{currentProfile+1}.profile.json",
+            InitialDirectory=ExportsFolder
         };
         if(dialog.ShowDialog()==DialogResult.OK)document.Save(dialog.FileName);
         return Task.CompletedTask;
