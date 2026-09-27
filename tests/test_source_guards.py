@@ -74,6 +74,18 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('public static class EezScript',models)
         self.assertIn("fn is >=1 and <=24",models)
         self.assertIn('>=104 and <=115 => $"F{usage-91}"',models)
+        main_project=(ROOT/'app/PixelPro2/PixelPro2.csproj').read_text()
+        pipe_host=(ROOT/'app/PixelPro2/NamedPipePluginHost.cs').read_text()
+        pc_project=(ROOT/'app/PixelPro2.PcMonitorPlugin/PixelPro2.PcMonitorPlugin.csproj').read_text()
+        music_project=(ROOT/'app/PixelPro2.MusicPlugin/PixelPro2.MusicPlugin.csproj').read_text()
+        workflow=(ROOT/'.github/workflows/build-release.yml').read_text()
+        self.assertNotIn('LibreHardwareMonitorLib',main_project)
+        self.assertIn('Compile Remove="SystemMonitor.cs"',main_project)
+        self.assertIn('PIXEL_PRO_2_PLUGINS',pipe_host)
+        self.assertIn('LibreHardwareMonitorLib',pc_project)
+        self.assertIn('MusicPlugin.cs',music_project)
+        self.assertIn('PixelPro2.PcMonitorPlugin.exe',workflow)
+        self.assertIn('PixelPro2.MusicPlugin.exe',workflow)
 
     def test_native_hid_script_engine_present(self):
         firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
