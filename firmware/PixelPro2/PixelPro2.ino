@@ -28,6 +28,11 @@ struct Configuration {
   Pixel::Binding bindings[Pixel::Profiles][Pixel::Keys];
   uint8_t brightness;
 };
+struct LegacyConfiguration5 {
+  uint32_t magic;
+  Pixel::Binding bindings[5][Pixel::Keys];
+  uint8_t brightness;
+};
 struct TouchCalibration {
   uint32_t magic;
   float ax,bx,cx;
@@ -106,11 +111,22 @@ void defaults() {
 void loadConfig() {
   defaults();
   Configuration saved{};
-  if(prefs.getBytesLength("config")==sizeof(saved)) {
+  size_t configBytes=prefs.getBytesLength("config");
+  if(configBytes==sizeof(saved)) {
     prefs.getBytes("config",&saved,sizeof(saved));
     bool valid=saved.magic==config.magic&&saved.brightness<=80;
     if(valid)for(auto& page:saved.bindings)for(auto& b:page)if(!Pixel::valid(b))valid=false;
     if(valid)config=saved;
+  } else if(configBytes==sizeof(LegacyConfiguration5)) {
+    LegacyConfiguration5 legacy{};
+    prefs.getBytes("config",&legacy,sizeof(legacy));
+    bool valid=legacy.magic==config.magic&&legacy.brightness<=80;
+    if(valid)for(auto& page:legacy.bindings)for(auto& b:page)if(!Pixel::valid(b))valid=false;
+    if(valid) {
+      config.brightness=legacy.brightness;
+      for(int p=0;p<5;p++)for(int k=0;k<Pixel::Keys;k++)
+        config.bindings[p][k]=legacy.bindings[p][k];
+    }
   }
   TouchCalibration tc{};
   if(prefs.getBytesLength("touchcal2")==sizeof(tc)) {
@@ -607,7 +623,10 @@ void scanTouch(uint32_t now) {
     int x=0,y=0;
     mapTouch(rawX,rawY,x,y);
     if(now==touchPressStartedAt) {
-      if(y>=280)selectProfile(constrain(x/96,0,4));
+      if(y>=280) {
+        int profileBank=(profile/5)*5;
+        selectProfile(profileBank+constrain(x/96,0,4));
+      }
       emit("E|TOUCH|"+String(x)+"|"+String(y)+"|"+String(quality));
     }
     return;
@@ -752,9 +771,11 @@ void render() {
     panel.setTextColor(0xFFFF);
     panel.setCursor(12,10);
     panel.print("PIXEL PRO 2.0");
-    for(int p=0;p<5;++p) {
-      panel.fillRect(p*96+2,282,92,36,p==profile?0x04BF:0x18C6);
-      panel.setCursor(p*96+13,292);
+    int profileBank=(profile/5)*5;
+    for(int slot=0;slot<5;++slot) {
+      int p=profileBank+slot;
+      panel.fillRect(slot*96+2,282,92,36,p==profile?0x04BF:0x18C6);
+      panel.setCursor(slot*96+13,292);
       panel.print("P");
       panel.print(p+1);
     }
@@ -903,7 +924,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.3.1|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
+    ok("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -951,15 +972,15 @@ void request(char* line) {
     ok("MONITOR");
     return;
   }
-  if(cmd=="PROFILE"&&n==3&&Pixel::number(tokens[2],4,p)) {
+  if(cmd=="PROFILE"&&n==3&&Pixel::number(tokens[2],Pixel::Profiles-1,p)) {
     selectProfile(p);ok("PROFILE");return;
   }
-  if(cmd=="GET"&&n==4&&Pixel::number(tokens[2],4,p)&&Pixel::number(tokens[3],7,k)) {
+  if(cmd=="GET"&&n==4&&Pixel::number(tokens[2],Pixel::Profiles-1,p)&&Pixel::number(tokens[3],7,k)) {
     auto& b=config.bindings[p][k];
     ok(String(b.type)+"|"+String(b.code)+"|"+String(b.modifiers)+"|"+String(b.color)+"|"+b.label);
     return;
   }
-  if(cmd=="SET"&&n==9&&Pixel::number(tokens[2],4,p)&&Pixel::number(tokens[3],7,k)&&
+  if(cmd=="SET"&&n==9&&Pixel::number(tokens[2],Pixel::Profiles-1,p)&&Pixel::number(tokens[3],7,k)&&
      strlen(tokens[4])==1&&Pixel::number(tokens[5],65535,v)&&Pixel::number(tokens[6],255,m)&&
      Pixel::number(tokens[7],65535,color)&&strlen(tokens[8])<=12) {
     Pixel::Binding b{};
@@ -1027,7 +1048,7 @@ void request(char* line) {
     ok("DELETED");return;
   }
   if(cmd=="ICON"&&n==5&&strcmp(tokens[2],"DELETE")==0&&
-     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)) {
+     Pixel::number(tokens[3],Pixel::Profiles-1,p)&&Pixel::number(tokens[4],7,k)) {
     if(!ensureFlash(false)){ok("DELETED");return;}
     char path[16];
     snprintf(path,sizeof(path),"/i%u%u.pxi",unsigned(p),unsigned(k));
@@ -1036,7 +1057,7 @@ void request(char* line) {
     ok("DELETED");return;
   }
   if(cmd=="ICON"&&n==7&&strcmp(tokens[2],"BEGIN")==0&&
-     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)&&
+     Pixel::number(tokens[3],Pixel::Profiles-1,p)&&Pixel::number(tokens[4],7,k)&&
      Pixel::number(tokens[5],8192,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
     if(!ensureFlash(true)||v<8){error("ICON");return;}
     stopSaver();
@@ -1059,7 +1080,7 @@ void request(char* line) {
   }
 
   if(cmd=="SCRIPT"&&n==5&&strcmp(tokens[2],"DELETE")==0&&
-     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)) {
+     Pixel::number(tokens[3],Pixel::Profiles-1,p)&&Pixel::number(tokens[4],7,k)) {
     if(!ensureFlash(false)){ok("DELETED");return;}
     char path[16];
     snprintf(path,sizeof(path),"/s%u%u.pxs",unsigned(p),unsigned(k));
@@ -1067,7 +1088,7 @@ void request(char* line) {
     ok("DELETED");return;
   }
   if(cmd=="SCRIPT"&&n==7&&strcmp(tokens[2],"BEGIN")==0&&
-     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)&&
+     Pixel::number(tokens[3],Pixel::Profiles-1,p)&&Pixel::number(tokens[4],7,k)&&
      Pixel::number(tokens[5],8192,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
     if(!ensureFlash(true)||v<7){error("SCRIPT");return;}
     stopSaver();
