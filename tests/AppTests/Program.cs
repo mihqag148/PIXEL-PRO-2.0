@@ -1,4 +1,6 @@
 using PixelPro2;
+using Binding = PixelPro2.Binding;
+using Shortcut = PixelPro2.Shortcut;
 
 static void Check(bool test){if(!test)throw new Exception("Assertion failed");}
 static void Reject(Action action){try{action();}catch(FormatException){return;}throw new Exception("Expected rejection");}
