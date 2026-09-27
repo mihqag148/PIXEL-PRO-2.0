@@ -3,6 +3,7 @@
 #include <USBCDC.h>
 #include <USBHIDKeyboard.h>
 #include <USBHIDConsumerControl.h>
+#include <USBHIDMouse.h>
 #include <Preferences.h>
 #include <SPI.h>
 #include <SD.h>
@@ -16,6 +17,7 @@
 USBCDC usbLink;
 USBHIDKeyboard keyboard;
 USBHIDConsumerControl media;
+USBHIDMouse mouse;
 Preferences prefs;
 Panel panel;
 Adafruit_NeoPixel leds(8,Pins::rgb,NEO_GRB+NEO_KHZ800);
@@ -166,6 +168,14 @@ void consumer(uint16_t code) {
 void activate(const Pixel::Binding& b,int key,bool down) {
   if(!down)return;
   if(b.type=='C')consumer(b.code);
+  if(b.type=='M') {
+    if(b.code==1)mouse.click(MOUSE_LEFT);
+    else if(b.code==2)mouse.click(MOUSE_RIGHT);
+    else if(b.code==3)mouse.click(MOUSE_MIDDLE);
+    else if(b.code==4){mouse.click(MOUSE_LEFT);delay(35);mouse.click(MOUSE_LEFT);}
+    else if(b.code==5)mouse.move(0,0,1);
+    else if(b.code==6)mouse.move(0,0,-1);
+  }
   if(b.type=='P')selectProfile(b.code);
   if(b.type=='H')emit("E|HOST|"+String(profile)+"|"+String(key));
 }
@@ -556,7 +566,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
+    ok("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -720,6 +730,7 @@ void setup() {
   USB.manufacturerName("PIXEL PRO");
   keyboard.begin();
   media.begin();
+  mouse.begin();
   usbLink.enableReboot(false);
   usbLink.setTxTimeoutMs(25);
   usbLink.begin();
