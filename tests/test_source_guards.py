@@ -27,10 +27,20 @@ class SourceGuardTests(unittest.TestCase):
 
     def test_touch_and_fast_boot_guards(self):
         firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
-        self.assertIn('pressure>=45',firmware)
-        self.assertIn('map(rx,touchCal.left,touchCal.right,24,455)',firmware)
-        self.assertIn('map(ry,touchCal.top,touchCal.bottom,24,295)',firmware)
-        self.assertIn('uint32_t(now-lastTouch)<8',firmware)
+        # Actual MCUFRIEND raw geometry: tp.x is sampled from D13 and tp.y
+        # from D14. Screen X follows rawY reversed, screen Y follows rawX.
+        self.assertIn('rawX=uint16_t(1023-readTouchAdc10(yp));',firmware)
+        self.assertIn('rawY=uint16_t(1023-readTouchAdc10(xm));',firmware)
+        self.assertIn('map(long(rawY),942L,139L,0L,479L)',firmware)
+        self.assertIn('map(long(rawX),136L,907L,0L,319L)',firmware)
+        # Calibration must be pressure-independent and solve a full affine
+        # transform from four physical targets.
+        self.assertIn('touchcal2',firmware)
+        self.assertIn('fabsf(determinant)<1500.0f',firmware)
+        self.assertIn('touchMedian7',firmware)
+        self.assertIn('TOUCHDIAG',firmware)
+        self.assertNotIn('pressure>=45',firmware)
+        self.assertIn('constexpr uint32_t pollMs=10',firmware)
         setup=firmware.split('void setup()',1)[1]
         self.assertIn('flashReady=SPIFFS.begin(false);',setup)
         self.assertNotIn('flashReady=SPIFFS.begin(true);',setup)
