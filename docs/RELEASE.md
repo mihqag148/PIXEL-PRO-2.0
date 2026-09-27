@@ -1,21 +1,22 @@
-## 2.2.0 — PC Monitoring Full Screen + eezbotfun-style feature parity
+## 2.2.1 — USB handshake + HX8357-B orientation/startup fix
 
-- Giữ toàn bộ v2.1.0: fix COM DTR+RTS, auto-probe COM, 5×8 keymap, HID/media, host macro, touch calibration, GIF screensaver, icon phím, RGB, orientation và ACK/CRC transfer.
-- Thêm **PC Monitoring Full Screen** trên HX8357-B: CPU/GPU load, CPU/GPU temperature, RAM, disk và network.
-- Studio dùng **LibreHardwareMonitor 0.9.6** cho CPU/GPU sensor, đồng thời có fallback Windows/.NET để không làm app lỗi khi sensor không được expose.
-- Monitor cập nhật qua CDC mỗi giây; keyboard/media HID và macro host vẫn hoạt động trong lúc dashboard toàn màn hình đang hiển thị.
-- Nút **PC Monitor** bật/tắt dashboard; mất COM tự dừng monitor phía Studio.
-- System.IO.Ports được nâng lên 10.0.3 để đồng bộ dependency của LibreHardwareMonitor.
-- Wireless/ESP-NOW của eezbotfun không được giả lập vì phần cứng mục tiêu là ESP32-S2 không có radio; các tính năng phần mềm phù hợp phần cứng được giữ trong PIXEL PRO 2.0.
+- Sửa lỗi **Windows có COM nhưng Studio timeout HELLO**:
+  - Studio mở cổng với **DTR trước rồi RTS** để tránh đi nhầm chuỗi line-state reboot của Arduino-ESP32 cũ.
+  - Firmware vẫn `enableReboot(false)` và không còn chặn reply bằng `USBCDC::operator bool()`; `USBCDC::write()`/TinyUSB tự xác định endpoint có host.
+  - Giảm TX timeout của CDC để event không làm chậm loop nếu host ngắt bất ngờ.
+- Giữ `CDCOnBoot=default` có chủ đích: PIXEL PRO 2.0 tự sở hữu CDC interface 0 qua `USBCDC usbLink`; bật core CDC song song có thể tạo interface cạnh tranh.
+- Hiệu chỉnh gốc landscape của HX8357-B theo panel thực tế: MADCTL từ gốc `0x28` sang `0x68`. Bốn mode trên Studio vẫn giữ nghĩa: Hướng gốc / 180° / lật ngang / 180° + lật ngang.
+- Migrate orientation sang key NVS `orient2` và mặc định về **Hướng gốc**, để giá trị sai đã lưu từ 2.2.0 không kéo màn quay/lật lại.
+- Sửa nhiễu lúc khởi động: gửi **Display OFF ngay**, init controller, set orientation, clear toàn màn đen rồi mới **Display ON**.
+- Giữ toàn bộ tính năng 2.2.0: 5×8 keymap, HID/media, host macro, touch calibration, GIF screensaver, icon phím, RGB và PC Monitoring fullscreen.
+- ESP32-S2 có **2.4 GHz Wi-Fi và hỗ trợ ESP-NOW**, nhưng không có Bluetooth. Wireless/ESP-NOW chưa được triển khai trong 2.2.1; bản này vẫn dùng USB CDC/HID.
 
 ### Flash
 
 Flash Download Tool: dùng **PIXEL_PRO_2_merged.bin tại 0x000000** (ESP32-S2, DIO, 40 MHz, 4 MB). App-only **PIXEL_PRO_2_app.bin** tại **0x010000** chỉ khi partition v2 đã tồn tại.
 
-Full merged flash có thể reset NVS/SPIFFS và xóa keymap đã lưu, touch calibration, GIF và icons. Preset JSON trên PC có thể xuất riêng trước khi nạp full.
+Nếu đang ở v2.0.0/v2.2.0 và COM/HID hoạt động không ổn định, ưu tiên nạp **merged** ở 0x000000 rồi rút/cắm USB lại. Sau khi boot, Studio 2.2.1 sẽ tự handshake với DTR→RTS.
 
-### Provenance
+### Validation
 
-Feature/workflow được đối chiếu với dự án MIT `eezbotfun/8-key-macropad`. PIXEL PRO 2.0 dùng protocol và implementation riêng cho ESP32-S2 + MCUFRIEND/HX8357-B. LibreHardwareMonitor được dùng theo MPL-2.0.
-
-CI phải build/test firmware ESP32-S2 thật và Studio Windows x64 thành công trước khi release được tạo. Kiểm tra vật lý LCD/touch/USB vẫn cần xác nhận trên thiết bị thực tế.
+CI phải chạy model tests, source regression guards, firmware ESP32-S2 compile thật, app protocol tests, UI smoke test và Windows self-contained publish trước khi release được tạo. Kiểm tra vật lý LCD/touch/USB vẫn cần xác nhận trên thiết bị thật.
