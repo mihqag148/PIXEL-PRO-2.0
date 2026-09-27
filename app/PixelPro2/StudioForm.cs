@@ -62,6 +62,7 @@ public sealed class StudioForm : Form {
 
     readonly NumericUpDown brightness=new(){Minimum=0,Maximum=80,Value=24,Width=80};
     readonly NumericUpDown saverSeconds=new(){Minimum=0,Maximum=3600,Value=30,Width=90};
+    readonly ComboBox screenOff=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=150};
     readonly ComboBox orientation=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=220};
     readonly ProgressBar transfer=new(){Width=260,Height=22,Minimum=0,Maximum=100};
     readonly DataGridView autoGrid=new(){
@@ -87,6 +88,8 @@ public sealed class StudioForm : Form {
 
         orientation.Items.AddRange(["Hướng gốc","Xoay 180°","Lật ngang","180° + lật ngang"]);
         orientation.SelectedIndex=0;
+        screenOff.Items.AddRange(["Always On","30 seconds","5 minutes","15 minutes"]);
+        screenOff.SelectedIndex=0;
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Margin=Padding.Empty};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
@@ -378,6 +381,17 @@ public sealed class StudioForm : Form {
         mediaRow.Controls.Add(MakeButton("Upload GIF",UploadGif));
         mediaRow.Controls.Add(MakeButton("Delete GIF",DeleteGif));
         flow.Controls.Add(mediaRow);
+
+        var screenRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false};
+        screenRow.Controls.Add(new Label{Text="Auto screen off",AutoSize=true,Padding=new Padding(0,7,8,0)});
+        screenRow.Controls.Add(screenOff);
+        screenRow.Controls.Add(MakeButton("Apply",async()=>{
+            NeedDevice();
+            int seconds=screenOff.SelectedIndex switch {1=>30,2=>300,3=>900,_=>0};
+            await device.Request($"SCREENOFF|{seconds}");
+            status.Text=seconds==0?"Screen always on":$"Screen off after {seconds}s";
+        }));
+        flow.Controls.Add(screenRow);
 
         var rgbRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false};
         rgbRow.Controls.Add(new Label{Text="RGB brightness",AutoSize=true,Padding=new Padding(0,7,8,0)});
@@ -810,6 +824,8 @@ public sealed class StudioForm : Form {
         brightness.Value=light;
         if(state.Length>=3&&int.TryParse(state[2],out int saver)&&saver is >=0 and <=3600)
             saverSeconds.Value=saver;
+        if(state.Length>=4&&int.TryParse(state[3],out int off))
+            screenOff.SelectedIndex=off switch {30=>1,300=>2,900=>3,_=>0};
         LoadEditor();LoadRulesGrid();SaveLocal();
         await RefreshMediaInfo();
         status.Text="Read 5 profiles from device";
@@ -870,6 +886,8 @@ public sealed class StudioForm : Form {
         }
         await device.Request($"RGB|{brightness.Value}");
         await device.Request($"SAVER|{saverSeconds.Value}");
+        int offSeconds=screenOff.SelectedIndex switch {1=>30,2=>300,3=>900,_=>0};
+        await device.Request($"SCREENOFF|{offSeconds}");
         await device.Request("SAVE");
         await device.Request($"PROFILE|{activeProfile}");
         transfer.Value=100;
