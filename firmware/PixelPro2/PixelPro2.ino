@@ -49,7 +49,7 @@ Pixel::Debounce keys[8],push,touch;
 bool suppressed[8]{};
 Pixel::Binding held[8]{};
 Pixel::LineBuffer<192> input;
-bool displayDirty=true,sdReady=false,flashReady=false;
+bool displayDirty=true,sdReady=false,sdAttempted=false,flashReady=false,flashAttempted=false;
 uint8_t dirtyTiles=255;
 uint32_t lastScan=0,lastTouch=0,lastInput=0;
 uint16_t consumerHeld=0;
@@ -209,32 +209,45 @@ void scanKeys(uint32_t now) {
 
 bool rawTouch(int& rawX,int& rawY,int& pressure) {
   constexpr int xp=39,xm=14,yp=13,ym=40;
+  auto median5=[](int pin) {
+    int v[5];
+    for(int i=0;i<5;i++)v[i]=analogRead(pin);
+    for(int i=1;i<5;i++) {
+      int x=v[i],j=i-1;
+      while(j>=0&&v[j]>x){v[j+1]=v[j];j--;}
+      v[j+1]=x;
+    }
+    return v[2];
+  };
+
   digitalWrite(Pins::cs,HIGH);
 
   pinMode(yp,INPUT);pinMode(ym,INPUT);
   pinMode(xp,OUTPUT);digitalWrite(xp,HIGH);
   pinMode(xm,OUTPUT);digitalWrite(xm,LOW);
-  delayMicroseconds(30);
-  int rx=1023-analogRead(yp);
+  delayMicroseconds(15);
+  int rx=1023-median5(yp);
 
   pinMode(xp,INPUT);pinMode(xm,INPUT);
   pinMode(yp,OUTPUT);digitalWrite(yp,HIGH);
   pinMode(ym,OUTPUT);digitalWrite(ym,LOW);
-  delayMicroseconds(30);
-  int ry=1023-analogRead(xm);
+  delayMicroseconds(15);
+  int ry=1023-median5(xm);
 
   pinMode(xp,OUTPUT);digitalWrite(xp,LOW);
   pinMode(ym,OUTPUT);digitalWrite(ym,HIGH);
   pinMode(xm,INPUT);pinMode(yp,INPUT);
-  delayMicroseconds(30);
-  int z1=analogRead(xm),z2=analogRead(yp);
+  delayMicroseconds(15);
+  int z1=median5(xm),z2=median5(yp);
 
   panel.restore();
 
-  pressure=z1>0?int((int64_t(abs(z2-z1))*rx*300)/(z1*1024)):0;
+  // Standard 4-wire resistive-touch pressure score: firmer presses approach
+  // 1023. The previous resistance threshold rejected many normal/firm taps.
+  pressure=constrain(1023-abs(z2-z1),0,1023);
   rawX=ry;
   rawY=rx;
-  return pressure>=160&&pressure<=1200&&rawX>=60&&rawX<=990&&rawY>=60&&rawY<=990;
+  return pressure>=45&&rawX>=20&&rawX<=1003&&rawY>=20&&rawY<=1003;
 }
 
 void drawCalibrationTarget() {
@@ -275,7 +288,7 @@ void finishCalibration() {
 }
 
 void scanTouch(uint32_t now) {
-  if(uint32_t(now-lastTouch)<25)return;
+  if(uint32_t(now-lastTouch)<8)return;
   lastTouch=now;
   int rx=0,ry=0,pressure=0;
   bool down=rawTouch(rx,ry,pressure);
@@ -289,12 +302,37 @@ void scanTouch(uint32_t now) {
       else drawCalibrationTarget();
       return;
     }
-    int x=constrain(map(rx,touchCal.left,touchCal.right,0,479),0,479);
-    int y=constrain(map(ry,touchCal.top,touchCal.bottom,0,319),0,319);
+    // Calibration crosshairs are at 24..455 / 24..295, not at the panel
+    // edges. Map those exact target coordinates and allow linear extrapolation
+    // to the physical edges before constraining.
+    int x=constrain(map(rx,touchCal.left,touchCal.right,24,455),0,479);
+    int y=constrain(map(ry,touchCal.top,touchCal.bottom,24,295),0,319);
     Pixel::orientTouch(displayMode,x,y);
     if(y>=280)selectProfile(constrain(x/96,0,4));
-    emit("E|TOUCH|"+String(x)+"|"+String(y));
+    emit("E|TOUCH|"+String(x)+"|"+String(y)+"|"+String(pressure));
   }
+}
+
+bool ensureFlash(bool allowFormat) {
+  if(flashReady)return true;
+  if(!flashAttempted) {
+    flashAttempted=true;
+    flashReady=SPIFFS.begin(false);
+  }
+  if(!flashReady&&allowFormat) {
+    SPIFFS.end();
+    flashReady=SPIFFS.begin(true);
+  }
+  return flashReady;
+}
+
+bool ensureSd() {
+  if(sdReady)return true;
+  if(sdAttempted)return false;
+  sdAttempted=true;
+  SPI.begin(Pins::sdSck,Pins::sdMiso,Pins::sdMosi,Pins::sdCs);
+  sdReady=SD.begin(Pins::sdCs,SPI,20000000);
+  return sdReady;
 }
 
 bool readIconHeader(File& file,uint16_t& w,uint16_t& h) {
@@ -518,7 +556,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.2.1|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
+    ok("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -587,7 +625,8 @@ void request(char* line) {
     return;
   }
   if(cmd=="SDINFO"&&n==2) {
-    ok(sdReady?"READY|"+String(uint32_t(SD.cardSize()/1024/1024)):"ABSENT");
+    bool ready=ensureSd();
+    ok(ready?"READY|"+String(uint32_t(SD.cardSize()/1024/1024)):"ABSENT");
     return;
   }
   if(cmd=="TOUCHCAL"&&n==3&&strcmp(tokens[2],"START")==0) {
@@ -606,7 +645,7 @@ void request(char* line) {
     return;
   }
   if(cmd=="MEDIA"&&n==3&&strcmp(tokens[2],"INFO")==0) {
-    if(!flashReady){ok("FLASHERR");return;}
+    if(!ensureFlash(false)){ok("ABSENT");return;}
     File f=SPIFFS.open("/screensaver.pxg",FILE_READ);
     if(!f){ok("ABSENT");return;}
     bool valid=readMediaHeader(f);
@@ -619,14 +658,14 @@ void request(char* line) {
   }
   if(cmd=="MEDIA"&&n==3&&strcmp(tokens[2],"DELETE")==0) {
     stopSaver();
-    if(!flashReady){error("FLASH");return;}
+    if(!ensureFlash(false)){ok("DELETED");return;}
     SPIFFS.remove("/screensaver.pxg");
     SPIFFS.remove("/upload.tmp");
     ok("DELETED");return;
   }
   if(cmd=="ICON"&&n==5&&strcmp(tokens[2],"DELETE")==0&&
      Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)) {
-    if(!flashReady){error("FLASH");return;}
+    if(!ensureFlash(false)){ok("DELETED");return;}
     char path[16];
     snprintf(path,sizeof(path),"/i%u%u.pxi",unsigned(p),unsigned(k));
     SPIFFS.remove(path);
@@ -636,7 +675,7 @@ void request(char* line) {
   if(cmd=="ICON"&&n==7&&strcmp(tokens[2],"BEGIN")==0&&
      Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)&&
      Pixel::number(tokens[5],8192,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
-    if(!flashReady||v<8){error("ICON");return;}
+    if(!ensureFlash(true)||v<8){error("ICON");return;}
     stopSaver();
     if(upload.file)upload.file.close();
     SPIFFS.remove("/upload.tmp");
@@ -657,7 +696,7 @@ void request(char* line) {
 
   if(cmd=="MEDIA"&&n==5&&strcmp(tokens[2],"BEGIN")==0&&
      Pixel::number(tokens[3],1900000,v)&&Pixel::number(tokens[4],0xFFFFFFFFUL,m)) {
-    if(!flashReady||v<12){error("MEDIA");return;}
+    if(!ensureFlash(true)||v<12){error("MEDIA");return;}
     stopSaver();
     if(upload.file)upload.file.close();
     SPIFFS.remove("/upload.tmp");
@@ -705,12 +744,21 @@ void setup() {
   leds.show();
   panel.begin(displayMode);
 
-  flashReady=SPIFFS.begin(true);
+  // Draw the key UI before touching optional filesystems so the device feels
+  // ready immediately after reset/flash.
+  render();
+
+  // Mount existing SPIFFS without formatting. A blank full-flash image used to
+  // trigger an expensive format here and made first boot look frozen. Formatting
+  // is now deferred until the first icon/GIF upload.
+  flashAttempted=true;
+  flashReady=SPIFFS.begin(false);
+  if(flashReady)dirtyTiles=255;
+
   mediaFrame=(uint8_t*)heap_caps_malloc(160UL*106UL,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
   if(!mediaFrame)mediaFrame=(uint8_t*)malloc(160UL*106UL);
 
-  SPI.begin(Pins::sdSck,Pins::sdMiso,Pins::sdMosi,Pins::sdCs);
-  sdReady=SD.begin(Pins::sdCs,SPI,20000000);
+  // SD is optional and probed only when Studio asks for SDINFO.
   lastInput=millis();
 }
 
