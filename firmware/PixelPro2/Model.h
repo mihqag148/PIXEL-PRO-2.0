@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 namespace Pixel {
-constexpr int Profiles=5, Keys=8;
+constexpr int Profiles=25, Keys=8;
 struct Binding {
   char type; // K keyboard, C consumer, M mouse, S native script, H host, P profile, D disabled
   uint16_t code;
