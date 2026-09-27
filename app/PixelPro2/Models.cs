@@ -54,6 +54,7 @@ public sealed class Binding {
         bool valid=Type switch {
             "K" => Code is >=4 and <=115,
             "C" => Modifiers==0 && new[]{233,234,226,205,181,182,183}.Contains(Code),
+            "M" => Modifiers==0 && Code is >=1 and <=6,
             "P" => Modifiers==0 && Code is >=0 and <5,
             "H" or "D" => Code==0 && Modifiers==0,
             _ => false
@@ -76,6 +77,31 @@ public sealed class Binding {
                     if(!(Uri.TryCreate(s.Value,UriKind.Absolute,out var uri)&&uri.Scheme is "http" or "https") &&
                        !Path.IsPathFullyQualified(s.Value))
                         throw new FormatException("Open cần URL http/https hoặc đường dẫn đầy đủ.");
+                    break;
+                case "Website":
+                    if(!(Uri.TryCreate(s.Value,UriKind.Absolute,out var web)&&web.Scheme is "http" or "https"))
+                        throw new FormatException("Website cần URL http/https.");
+                    break;
+                case "LaunchApp":
+                case "OpenFolder":
+                case "OpenFile":
+                    if(!Path.IsPathFullyQualified(s.Value))
+                        throw new FormatException($"{s.Type} cần đường dẫn đầy đủ.");
+                    break;
+                case "Media":
+                    if(s.Value.Trim().ToUpperInvariant() is not ("VOLUP" or "VOLDOWN" or "MUTE" or "PLAYPAUSE" or "NEXT" or "PREV" or "STOP"))
+                        throw new FormatException("Media: VOLUP/VOLDOWN/MUTE/PLAYPAUSE/NEXT/PREV/STOP.");
+                    break;
+                case "ChangeProfile":
+                    if(!int.TryParse(s.Value,out int profile)||profile is <1 or >5)
+                        throw new FormatException("ChangeProfile dùng 1..5.");
+                    break;
+                case "FunctionalKey":
+                    Shortcut.Parse(s.Value);
+                    break;
+                case "DeviceCtrl":
+                    if(s.Value.Trim().ToUpperInvariant() is not ("MONITOR_TOGGLE" or "PROFILE_NEXT" or "PROFILE_PREV"))
+                        throw new FormatException("DeviceCtrl không hợp lệ.");
                     break;
                 case "Delay":
                     if(!int.TryParse(s.Value,out int ms)||ms<0||ms>30000)
@@ -116,15 +142,56 @@ public sealed class Binding {
     }
 }
 
+public sealed class AutoProfileRule {
+    public string Process { get; set; }="";
+    public int Profile { get; set; }
+    public bool Enabled { get; set; }=true;
+
+    public void Validate() {
+        if(Profile is <0 or >4)throw new FormatException("Auto profile phải nằm trong 1..5.");
+        if(Process is null||Process.Length>128||Process.IndexOfAny(Path.GetInvalidFileNameChars())>=0)
+            throw new FormatException("Tên process auto profile không hợp lệ.");
+    }
+}
+
+public static class HidShortcut {
+    public static bool TryParse(string text,out int usage,out int modifiers) {
+        usage=0;modifiers=0;
+        var parts=text.ToUpperInvariant().Split('+',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+        if(parts.Length<1||parts.Length>5)return false;
+        foreach(var p in parts) {
+            switch(p) {
+                case "CTRL":modifiers|=1;continue;
+                case "SHIFT":modifiers|=2;continue;
+                case "ALT":modifiers|=4;continue;
+                case "WIN":modifiers|=8;continue;
+            }
+            if(usage!=0)return false;
+            usage=p switch {
+                _ when p.Length==1&&p[0] is >= 'A' and <= 'Z' => 4+(p[0]-'A'),
+                "1"=>30,"2"=>31,"3"=>32,"4"=>33,"5"=>34,"6"=>35,"7"=>36,"8"=>37,"9"=>38,"0"=>39,
+                "ENTER"=>40,"ESC"=>41,"BACKSPACE"=>42,"TAB"=>43,"SPACE"=>44,
+                "INSERT"=>73,"HOME"=>74,"PAGEUP"=>75,"DELETE"=>76,"END"=>77,"PAGEDOWN"=>78,
+                "RIGHT"=>79,"LEFT"=>80,"DOWN"=>81,"UP"=>82,
+                _ when p.StartsWith('F')&&int.TryParse(p[1..],out int fn)&&fn is >=1 and <=12 => 57+fn,
+                _=>0
+            };
+            if(usage==0)return false;
+        }
+        return usage!=0;
+    }
+}
+
 public sealed class Preset {
-    public int Schema { get; set; }=2;
+    public int Schema { get; set; }=3;
+    public List<AutoProfileRule> AutoProfiles { get; set; }=[];
     public Binding[][] Profiles { get; set; }=Enumerable.Range(0,5)
         .Select(_=>Enumerable.Range(0,8)
             .Select(k=>new Binding{Code=4+k,Label=$"Key {(char)('A'+k)}"})
             .ToArray()).ToArray();
 
     public void Validate() {
-        if(Schema!=2||Profiles is null||Profiles.Length!=5)
+        if(Schema is not (2 or 3)||Profiles is null||Profiles.Length!=5)
             throw new FormatException("Cần preset PIXEL PRO 2.0 với 5 profile.");
         foreach(var p in Profiles) {
             if(p is null||p.Length!=8) throw new FormatException("Mỗi profile cần 8 phím.");
@@ -133,6 +200,9 @@ public sealed class Preset {
                 b.Validate();
             }
         }
+        AutoProfiles ??=[];
+        if(AutoProfiles.Count>64)throw new FormatException("Tối đa 64 luật auto profile.");
+        foreach(var rule in AutoProfiles)rule.Validate();
     }
 
     public static Preset Load(string path) {
@@ -140,6 +210,7 @@ public sealed class Preset {
         var p=JsonSerializer.Deserialize<Preset>(File.ReadAllText(path)) ??
               throw new FormatException("Preset rỗng.");
         p.Validate();
+        p.Schema=3;
         return p;
     }
 
