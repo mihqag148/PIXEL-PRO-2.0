@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -11,6 +11,6 @@
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="10.0.3" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
-    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.26100.7705" />
   </ItemGroup>
 </Project>
