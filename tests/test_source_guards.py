@@ -46,6 +46,15 @@ class SourceGuardTests(unittest.TestCase):
         self.assertNotIn('flashReady=SPIFFS.begin(true);',setup)
         self.assertIn('sdAttempted=false',firmware)
 
+    def test_profile_count_and_migration(self):
+        firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
+        model=(ROOT/'firmware/PixelPro2/Model.h').read_text()
+        self.assertIn('Profiles=25',model)
+        self.assertIn('LegacyConfiguration5',firmware)
+        self.assertIn('PIXELPRO2|2.4.0|25|8|HX8357B',firmware)
+        self.assertIn('profileBank=(profile/5)*5',firmware)
+        self.assertIn('Pixel::number(tokens[2],Pixel::Profiles-1,p)',firmware)
+
     def test_native_hid_script_engine_present(self):
         firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
         model=(ROOT/'firmware/PixelPro2/Model.h').read_text()
