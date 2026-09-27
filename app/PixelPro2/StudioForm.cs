@@ -38,11 +38,13 @@ public sealed class StudioForm : Form {
     readonly MacroRunner runner=new();
     readonly CancellationTokenSource shutdown=new();
     readonly SystemMonitorCollector monitorCollector=new();
+    readonly MusicPlugin musicPlugin=new();
 
     Preset preset=new();
     int currentProfile,currentKey,activeProfile;
     int keyColor=1215;
-    bool loading,busy,monitorEnabled,monitorSending,autoSwitching,dark,touchDiagEnabled;
+    bool loading,busy,monitorEnabled,monitorSending,musicEnabled,musicSending,autoSwitching,dark,touchDiagEnabled;
+    string lastMusicPayload="";
 
     readonly ListBox deviceList=new(){Dock=DockStyle.Fill,IntegralHeight=false};
     readonly ListBox toolbox=new(){Dock=DockStyle.Fill,IntegralHeight=false};
@@ -57,12 +59,16 @@ public sealed class StudioForm : Form {
     readonly Label modeInfo=new(){AutoSize=true,Padding=new Padding(6,5,6,5)};
     readonly Label mediaInfo=new(){AutoSize=true,Text="Screensaver: not read"};
     readonly Label monitorInfo=new(){AutoSize=true,Text="PC Monitor: OFF"};
+    readonly Label musicInfo=new(){AutoSize=true,Text="Music Player: OFF"};
+    readonly Label pluginStatus=new(){AutoSize=true,Padding=new Padding(8,5,8,5),Text="Plugins: PC Monitor OFF · Music OFF"};
     readonly Label touchInfo=new(){AutoSize=true,Text="Touch: --"};
     readonly TextBox log=new(){Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical};
 
     readonly CheckBox hidMode=new(){Text="HID Mode · runs without Studio",AutoSize=true,Checked=true};
     readonly CheckBox armed=new(){Text="Allow App-mode actions on this PC",AutoSize=true,Checked=true};
     readonly CheckBox autoProfileEnabled=new(){Text="Enable dynamic profile switching",AutoSize=true};
+    readonly CheckBox monitorPluginToggle=new(){Text="PC Monitoring Plugin",AutoSize=true};
+    readonly CheckBox musicPluginToggle=new(){Text="Music Player Plugin (SMTC)",AutoSize=true};
 
     readonly NumericUpDown brightness=new(){Minimum=0,Maximum=80,Value=24,Width=80};
     readonly NumericUpDown saverSeconds=new(){Minimum=0,Maximum=3600,Value=30,Width=90};
@@ -75,6 +81,7 @@ public sealed class StudioForm : Form {
     };
 
     readonly System.Windows.Forms.Timer monitorTimer=new(){Interval=1000};
+    readonly System.Windows.Forms.Timer musicTimer=new(){Interval=1000};
     readonly System.Windows.Forms.Timer autoProfileTimer=new(){Interval=600};
     readonly NotifyIcon tray=new(){Icon=SystemIcons.Application,Text="PIXEL PRO 2.0"};
 
@@ -124,6 +131,8 @@ public sealed class StudioForm : Form {
         footer.Controls.Add(status);
         modeInfo.Dock=DockStyle.Right;
         footer.Controls.Add(modeInfo);
+        pluginStatus.Dock=DockStyle.Right;
+        footer.Controls.Add(pluginStatus);
         root.Controls.Add(footer,0,2);
 
         WireEvents();
@@ -296,6 +305,10 @@ public sealed class StudioForm : Form {
         keyTab.Controls.Add(BuildKeyEditor());
         tabs.TabPages.Add(keyTab);
 
+        var pluginsTab=new TabPage("Plugins"){Padding=new Padding(14)};
+        pluginsTab.Controls.Add(BuildPlugins());
+        tabs.TabPages.Add(pluginsTab);
+
         var displayTab=new TabPage("Display & Media"){Padding=new Padding(14)};
         displayTab.Controls.Add(BuildDisplayMedia());
         tabs.TabPages.Add(displayTab);
@@ -413,6 +426,48 @@ public sealed class StudioForm : Form {
         return split;
     }
 
+    Control BuildPlugins() {
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,ColumnCount=1,Padding=new Padding(14)};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,110));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,110));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+
+        root.Controls.Add(new Label{
+            Text="Integrated Plugins",
+            AutoSize=true,Font=new Font("Segoe UI",18,FontStyle.Bold),
+            Padding=new Padding(2,8,2,4)
+        },0,0);
+
+        var pcBox=new GroupBox{Text="PC Monitoring",Dock=DockStyle.Fill,Padding=new Padding(12)};
+        var pcFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
+        pcFlow.Controls.Add(monitorPluginToggle);
+        pcFlow.Controls.Add(monitorInfo);
+        pcFlow.Controls.Add(new Label{
+            AutoSize=true,ForeColor=Color.DimGray,
+            Text="CPU / GPU / RAM / Disk / Network telemetry is rendered full-screen on PIXEL PRO."
+        });
+        pcBox.Controls.Add(pcFlow);
+        root.Controls.Add(pcBox,0,1);
+
+        var musicBox=new GroupBox{Text="Music Player",Dock=DockStyle.Fill,Padding=new Padding(12)};
+        var musicFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
+        musicFlow.Controls.Add(musicPluginToggle);
+        musicFlow.Controls.Add(musicInfo);
+        musicFlow.Controls.Add(new Label{
+            AutoSize=true,ForeColor=Color.DimGray,
+            Text="Uses Windows SMTC: Spotify, Apple Music, browsers, VLC and other compatible players."
+        });
+        musicBox.Controls.Add(musicFlow);
+        root.Controls.Add(musicBox,0,2);
+
+        root.Controls.Add(new Label{
+            Dock=DockStyle.Fill,AutoSize=false,ForeColor=Color.DimGray,
+            Text="Plugin status is also shown in the bottom bar. Enabling one display plugin replaces the other full-screen plugin on the active device; HID keys continue working."
+        },0,3);
+        return root;
+    }
+
     Control BuildDisplayMedia() {
         var flow=new FlowLayoutPanel{
             Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,
@@ -458,10 +513,9 @@ public sealed class StudioForm : Form {
         rgbRow.Controls.Add(MakeButton("Apply RGB",async()=>{
             NeedDevice();await device.Request($"RGB|{brightness.Value}");await device.Request("SAVE");
         }));
-        rgbRow.Controls.Add(MakeButton("PC Monitor",ToggleMonitor));
+        rgbRow.Controls.Add(MakeButton("Toggle PC Monitor",ToggleMonitor));
         flow.Controls.Add(rgbRow);
 
-        flow.Controls.Add(monitorInfo);
         flow.Controls.Add(mediaInfo);
         flow.Controls.Add(touchInfo);
         flow.Controls.Add(transfer);
@@ -538,10 +592,21 @@ public sealed class StudioForm : Form {
             preset.AutoProfileEnabled=autoProfileEnabled.Checked;
             SaveLocalQuiet();
         };
+        monitorPluginToggle.CheckedChanged+=(_,_)=>{
+            if(loading)return;
+            Guard(()=>SetMonitorEnabled(monitorPluginToggle.Checked));
+        };
+        musicPluginToggle.CheckedChanged+=(_,_)=>{
+            if(loading)return;
+            Guard(()=>SetMusicEnabled(musicPluginToggle.Checked));
+        };
 
         device.Event+=e=>OnUi(()=>HandleEvent(e));
         device.Disconnected+=e=>OnUi(()=>{
             monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="PC Monitor: OFF";
+            musicEnabled=false;musicTimer.Stop();musicInfo.Text="Music Player: OFF";
+            loading=true;monitorPluginToggle.Checked=false;musicPluginToggle.Checked=false;loading=false;
+            UpdatePluginStatus();
             status.Text="Disconnected";
             Log(e);
             RefreshPorts();
@@ -566,6 +631,14 @@ public sealed class StudioForm : Form {
             } finally {monitorSending=false;}
         };
 
+        musicTimer.Tick+=async (_,_)=>{
+            if(!musicEnabled||musicSending||!device.Connected)return;
+            musicSending=true;
+            try{await SendMusicFrame();}
+            catch(Exception ex){Log("MUSIC: "+ex.Message);}
+            finally{musicSending=false;}
+        };
+
         autoProfileTimer.Tick+=async (_,_)=>await CheckAutoProfile();
 
         tray.DoubleClick+=(_,_)=>{Show();WindowState=FormWindowState.Normal;Activate();tray.Visible=false;};
@@ -581,8 +654,9 @@ public sealed class StudioForm : Form {
                     e.Cancel=true;return;
                 }
             }
-            monitorTimer.Stop();autoProfileTimer.Stop();
-            monitorTimer.Dispose();autoProfileTimer.Dispose();monitorCollector.Dispose();
+            monitorTimer.Stop();musicTimer.Stop();autoProfileTimer.Stop();
+            monitorTimer.Dispose();musicTimer.Dispose();autoProfileTimer.Dispose();
+            monitorCollector.Dispose();musicPlugin.Dispose();
             shutdown.Cancel();device.Dispose();tray.Dispose();
         };
     }
@@ -1144,21 +1218,87 @@ public sealed class StudioForm : Form {
         status.Text=touchInfo.Text;
     }
 
-    async Task ToggleMonitor() {
+    async Task ToggleMonitor()=>await SetMonitorEnabled(!monitorEnabled);
+
+    async Task SetMonitorEnabled(bool enabled) {
         NeedDevice();
-        if(monitorEnabled) {
-            monitorEnabled=false;monitorTimer.Stop();
+        monitorEnabled=enabled;
+        loading=true;monitorPluginToggle.Checked=enabled;loading=false;
+        if(enabled) {
+            if(musicEnabled)await SetMusicEnabled(false);
+            await SendMonitorFrame();
+            monitorTimer.Start();
+        } else {
+            monitorTimer.Stop();
             await device.Request("MONITOR|OFF");
             monitorInfo.Text="PC Monitor: OFF";
-        } else {
-            monitorEnabled=true;await SendMonitorFrame();monitorTimer.Start();
         }
+        UpdatePluginStatus();
     }
 
     async Task SendMonitorFrame() {
         var s=monitorCollector.Read();
         await device.Request($"MONITOR|SET|{s.CpuPercent}|{s.GpuPercent}|{s.RamPercent}|{s.DiskPercent}|{s.NetKbps}|{s.CpuTempC}|{s.GpuTempC}");
         monitorInfo.Text=$"PC Monitor: CPU {s.CpuPercent}% · GPU {s.GpuPercent}% · RAM {s.RamPercent}%";
+        UpdatePluginStatus();
+    }
+
+    async Task SetMusicEnabled(bool enabled) {
+        NeedDevice();
+        musicEnabled=enabled;
+        loading=true;musicPluginToggle.Checked=enabled;loading=false;
+        if(enabled) {
+            if(monitorEnabled)await SetMonitorEnabled(false);
+            musicPlugin.Reset();
+            lastMusicPayload="";
+            await SendMusicFrame();
+            musicTimer.Start();
+        } else {
+            musicTimer.Stop();
+            lastMusicPayload="";
+            await device.Request("MUSIC|OFF");
+            musicInfo.Text="Music Player: OFF";
+        }
+        UpdatePluginStatus();
+    }
+
+    static string CleanMusicField(string value) {
+        var chars=value.Take(48).Select(ch=>ch switch {
+            '|' => '/',
+            >= ' ' and <= '~' => ch,
+            _ => '?'
+        }).ToArray();
+        string text=new(chars);
+        return string.IsNullOrWhiteSpace(text)?"--":text;
+    }
+
+    async Task SendMusicFrame() {
+        var snapshot=await musicPlugin.Read();
+        if(snapshot is null) {
+            if(lastMusicPayload!="OFF") {
+                await device.Request("MUSIC|OFF");
+                lastMusicPayload="OFF";
+            }
+            musicInfo.Text="Music Player: enabled · no active SMTC session";
+            UpdatePluginStatus();
+            return;
+        }
+
+        string title=CleanMusicField(snapshot.Value.Title);
+        string artist=CleanMusicField(snapshot.Value.Artist);
+        string payload=$"{(snapshot.Value.Playing?1:0)}|{title}|{artist}";
+        if(payload!=lastMusicPayload) {
+            await device.Request("MUSIC|SET|"+payload);
+            lastMusicPayload=payload;
+        }
+        musicInfo.Text=$"Music Player: {(snapshot.Value.Playing?"Playing":"Paused")} · {title} · {artist}";
+        UpdatePluginStatus();
+    }
+
+    void UpdatePluginStatus() {
+        string pc=monitorEnabled?"PC Monitor ON":"PC Monitor OFF";
+        string music=musicEnabled?"Music ON":"Music OFF";
+        pluginStatus.Text=$"Plugins: {pc} · {music}";
     }
 
     async Task RunDeviceStep(Step step) {
