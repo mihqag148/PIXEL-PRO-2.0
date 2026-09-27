@@ -99,7 +99,7 @@ uint16_t monitorNet=0;
 
 // Integrated SMTC music plugin
 bool musicActive=false,musicPlaying=false;
-char musicTitle[49]{},musicArtist[49]{};
+char musicTitle[49]{},musicArtist[49]{},musicAlbum[49]{};
 
 void defaults() {
   memset(&config,0,sizeof(config));
@@ -838,6 +838,13 @@ void drawMusicScreen() {
   strncpy(artistLine,musicArtist,36);
   panel.print(artistLine[0]?artistLine:"--");
 
+  panel.setTextSize(1);
+  panel.setTextColor(0x7BEF);
+  panel.setCursor(20,176);
+  char albumLine[55]{};
+  snprintf(albumLine,sizeof(albumLine),"Album: %.42s",musicAlbum[0]?musicAlbum:"--");
+  panel.print(albumLine);
+
   panel.setTextColor(0xFFFF);
   panel.setTextSize(1);
   panel.drawRect(20,210,440,54,0x7BEF);
@@ -1057,8 +1064,9 @@ void request(char* line) {
     saverSeconds=v;
     ok("SAVER");return;
   }
-  if(cmd=="MUSIC"&&n==6&&strcmp(tokens[2],"SET")==0&&
-     Pixel::number(tokens[3],1,v)&&strlen(tokens[4])<=48&&strlen(tokens[5])<=48) {
+  if(cmd=="MUSIC"&&(n==6||n==7)&&strcmp(tokens[2],"SET")==0&&
+     Pixel::number(tokens[3],1,v)&&strlen(tokens[4])<=48&&strlen(tokens[5])<=48&&
+     (n==6||strlen(tokens[6])<=48)) {
     if(calibrating||upload.active){error("BUSY");return;}
     stopSaver();
     monitorActive=false;
@@ -1066,8 +1074,11 @@ void request(char* line) {
     musicPlaying=v!=0;
     strncpy(musicTitle,tokens[4],sizeof(musicTitle)-1);
     strncpy(musicArtist,tokens[5],sizeof(musicArtist)-1);
+    if(n==7)strncpy(musicAlbum,tokens[6],sizeof(musicAlbum)-1);
+    else musicAlbum[0]=0;
     musicTitle[sizeof(musicTitle)-1]=0;
     musicArtist[sizeof(musicArtist)-1]=0;
+    musicAlbum[sizeof(musicAlbum)-1]=0;
     displayDirty=true;
     userActivity();
     ok("MUSIC");return;
