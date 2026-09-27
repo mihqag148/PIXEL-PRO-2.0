@@ -979,6 +979,11 @@ void request(char* line) {
     ok("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MUSIC,MOUSE,SCRIPT");
     return;
   }
+  if(cmd=="INFO"&&n==2) {
+    char id[12];
+    snprintf(id,sizeof(id),"%08lX",uint32_t(ESP.getEfuseMac()));
+    ok("2.4.0|"+String(id));return;
+  }
   if(cmd=="KEYHASH"&&n==2){ok(String(keymapHash()));return;}
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
   if(cmd=="DISPLAY"&&n==3&&Pixel::number(tokens[2],3,v)) {
