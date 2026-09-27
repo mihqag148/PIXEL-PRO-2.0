@@ -5,6 +5,7 @@ namespace PixelPro2;
 public sealed class StudioSettings {
     public int Schema { get; set; }=1;
     public bool DarkTheme { get; set; }
+    public bool NamedPipeService { get; set; }=true;
     public bool PcMonitorPlugin { get; set; }
     public bool MusicPlugin { get; set; }
     public string Language { get; set; }="en";
