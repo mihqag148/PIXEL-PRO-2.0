@@ -16,6 +16,8 @@ public sealed class Device : IDisposable {
     public event Action<string>? Disconnected;
     public bool Connected => port?.IsOpen==true;
     public string? PortName => port?.PortName;
+    public string FirmwareVersion { get; private set; }="";
+    public string DeviceId { get; private set; }="";
 
     public async Task Connect(string name) {
         Dispose();
@@ -48,6 +50,13 @@ public sealed class Device : IDisposable {
                     var hello=await Request("HELLO",TimeSpan.FromSeconds(2));
                     if(!Protocol.CompatibleHello(hello))
                         throw new IOException("Cổng này không phải PIXEL PRO 2.0 tương thích.");
+                    var hp=hello.Split('|');
+                    FirmwareVersion=hp.Length>1?hp[1]:"";
+                    try {
+                        var info=await Request("INFO",TimeSpan.FromSeconds(2));
+                        var ip=info.Split('|');
+                        if(ip.Length>=2){FirmwareVersion=ip[0];DeviceId=ip[1];}
+                    } catch { DeviceId=""; }
                     return;
                 } catch(Exception ex) when(ex is TimeoutException or IOException) {
                     last=ex;
@@ -195,6 +204,7 @@ public sealed class Device : IDisposable {
         try { port?.Close(); } catch {}
         port?.Dispose();
         port=null;
+        FirmwareVersion="";DeviceId="";
         foreach(var p in pending)
             if(pending.TryRemove(p.Key,out var request)) request.TrySetCanceled();
         mediaAck?.TrySetCanceled();
