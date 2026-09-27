@@ -38,7 +38,7 @@ public sealed class StudioForm : Form {
     Preset preset=new();
     int currentProfile,currentKey,activeProfile;
     int keyColor=1215;
-    bool loading,busy,monitorEnabled,monitorSending,autoSwitching,dark;
+    bool loading,busy,monitorEnabled,monitorSending,autoSwitching,dark,touchDiagEnabled;
 
     readonly ListBox deviceList=new(){Dock=DockStyle.Fill,IntegralHeight=false};
     readonly ListBox toolbox=new(){Dock=DockStyle.Fill,IntegralHeight=false};
@@ -79,7 +79,7 @@ public sealed class StudioForm : Form {
         "PixelPro2","preset-v3.json");
 
     public StudioForm() {
-        Text="PIXEL PRO 2.0 · Studio 2.3";
+        Text="PIXEL PRO 2.0 · Studio 2.3.1";
         MinimumSize=new Size(1180,760);
         Size=new Size(1360,860);
         StartPosition=FormStartPosition.CenterScreen;
@@ -370,6 +370,8 @@ public sealed class StudioForm : Form {
             status.Text="LCD orientation saved";
         }));
         orientationRow.Controls.Add(MakeButton("Calibrate Touch",CalibrateTouch));
+        orientationRow.Controls.Add(MakeButton("Reset Touch",ResetTouchCalibration));
+        orientationRow.Controls.Add(MakeButton("Touch Diagnostics",ToggleTouchDiagnostics));
         flow.Controls.Add(orientationRow);
 
         var mediaRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false};
@@ -409,7 +411,7 @@ public sealed class StudioForm : Form {
 
         var note=new Label{
             AutoSize=true,MaximumSize=new Size(820,0),Padding=new Padding(0,12,0,0),
-            Text="Touch calibration: tap four crosshairs in order. v2.3 uses median sampling, lower pressure threshold and correct 24..455 / 24..295 target geometry."
+            Text="Touch 2.3.1: raw axes follow the actual MCUFRIEND wiring (screen X comes from rawY, screen Y from rawX). Calibration uses a 4-point affine solve that handles axis swap, inversion and panel skew. Hold each target briefly, then release before touching the next one."
         };
         flow.Controls.Add(note);
         return flow;
@@ -977,11 +979,35 @@ public sealed class StudioForm : Form {
 
     async Task CalibrateTouch() {
         NeedDevice();
+        if(touchDiagEnabled) {
+            await device.Request("TOUCHDIAG|OFF");
+            touchDiagEnabled=false;
+        }
         var rsp=await device.Request("TOUCHCAL|START");
         if(rsp!="STARTED")throw new IOException("Device did not enter touch calibration.");
-        status.Text="Tap the four touch targets";
-        MessageBox.Show(this,"Tap the four + marks precisely:\nTop-left → top-right → bottom-right → bottom-left.",
-            "Touch Calibration",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        touchInfo.Text="Touch calibration: point 1/4";
+        status.Text="Hold each target briefly, then release before the next target";
+        MessageBox.Show(this,
+            "Chạm và GIỮ nhẹ từng dấu + khoảng 0,1 giây rồi nhả tay hoàn toàn.\n\nThứ tự: trên-trái → trên-phải → dưới-phải → dưới-trái.\n\nMỗi điểm chỉ chuyển tiếp sau khi bạn nhả tay.",
+            "Touch Calibration 2.3.1",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
+    async Task ResetTouchCalibration() {
+        NeedDevice();
+        await device.Request("TOUCHCAL|RESET");
+        touchInfo.Text="Touch: default hardware mapping";
+        status.Text="Touch calibration reset · dùng mapping MCUFRIEND mặc định";
+    }
+
+    async Task ToggleTouchDiagnostics() {
+        NeedDevice();
+        touchDiagEnabled=!touchDiagEnabled;
+        var rsp=await device.Request($"TOUCHDIAG|{(touchDiagEnabled?"ON":"OFF")}");
+        if(rsp!=(touchDiagEnabled?"ON":"OFF"))throw new IOException("Touch diagnostics state was not accepted.");
+        touchInfo.Text=touchDiagEnabled
+            ?"Touch diagnostics: ON · chạm các góc để xem RAW/MAPPED"
+            :"Touch diagnostics: OFF";
+        status.Text=touchInfo.Text;
     }
 
     async Task ToggleMonitor() {
@@ -1030,12 +1056,28 @@ public sealed class StudioForm : Form {
         } else if(t.Length>=3&&t[1]=="PROFILE"&&int.TryParse(t[2],out int profile)&&profile is >=0 and <5) {
             activeProfile=profile;RefreshProfileButtons();
         } else if(t.Length>=2&&t[1]=="CALDONE") {
-            status.Text="Touch calibration saved";Log(text);
+            touchInfo.Text="Touch calibration: AFFINE saved";
+            status.Text="Touch calibration saved · test all corners now";
+            Log(text);
         } else if(t.Length>=2&&t[1]=="CALFAIL") {
-            status.Text="Touch calibration failed";Log(text);
+            touchInfo.Text="Touch calibration failed: "+string.Join(" · ",t.Skip(2));
+            status.Text="Touch calibration failed · retry while holding each target";
+            Log(text);
+        } else if(t.Length>=4&&t[1]=="CALPOINT") {
+            touchInfo.Text=$"Calibration point {t[2]}/4 · raw {t[3]},{(t.Length>=5?t[4]:"?")} captured";
+            status.Text=int.TryParse(t[2],out int cp)&&cp<4
+                ?$"Point {cp} captured · touch point {cp+1}"
+                :"Finishing affine calibration…";
+            Log(text);
+        } else if(t.Length>=3&&t[1]=="CALWAIT") {
+            touchInfo.Text=$"Calibration point {t[2]}/4 · giữ lâu hơn rồi nhả";
+            Log(text);
+        } else if(t.Length>=7&&t[1]=="TOUCHRAW") {
+            string state=t[2]=="1"?"DOWN":"idle";
+            touchInfo.Text=$"Touch RAW: {state} · raw {t[3]},{t[4]} · q {t[5]} · mapped {t[6]},{(t.Length>=8?t[7]:"-")}";
         } else if(t.Length>=4&&t[1]=="TOUCH") {
-            string pressure=t.Length>=5?$" · pressure {t[4]}":"";
-            touchInfo.Text=$"Touch: x {t[2]} · y {t[3]}{pressure}";
+            string quality=t.Length>=5?$" · quality {t[4]}":"";
+            touchInfo.Text=$"Touch: x {t[2]} · y {t[3]}{quality}";
         } else if(t.Length>=2&&t[1]=="SCRIPTERR") {
             Log(text);
         }
