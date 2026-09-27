@@ -5,10 +5,10 @@ using Shortcut = PixelPro2.Shortcut;
 static void Check(bool test){if(!test)throw new Exception("Assertion failed");}
 static void Reject(Action action){try{action();}catch(FormatException){return;}throw new Exception("Expected rejection");}
 
-Check(Protocol.CompatibleHello("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,MEDIA,MONITOR,MOUSE,SCRIPT,TOUCHDIAG"));
+Check(Protocol.CompatibleHello("PIXELPRO2|2.5.0|25|8|HX8357B|HID,CDC,MEDIA,MONITOR,MOUSE,SCRIPT,TOUCHDIAG"));
 Check(!Protocol.CompatibleHello("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC"));
 Check(!Protocol.CompatibleHello("PIXELPRO2|3.0.0|25|8|HX8357B|HID,CDC"));
-Check(!Protocol.CompatibleHello("PIXELPRO2|2.4.0|20|8|HX8357B|HID,CDC"));
+Check(!Protocol.CompatibleHello("PIXELPRO2|2.5.0|20|8|HX8357B|HID,CDC"));
 
 var b=Binding.Parse("K|6|1|1215|Copy");
 Check(b.Wire(0,0)=="SET|0|0|K|6|1|1215|Copy");
