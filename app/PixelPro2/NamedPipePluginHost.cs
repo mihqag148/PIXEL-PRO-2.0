@@ -55,8 +55,9 @@ public sealed class NamedPipePluginHost : IDisposable {
                     PipeName,PipeDirection.In,8,PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
                 await pipe.WaitForConnectionAsync(token);
-                _=Task.Run(()=>HandleClient(pipe,token),token);
+                var connectedPipe=pipe;
                 pipe=null;
+                _=Task.Run(()=>HandleClient(connectedPipe,token),token);
             } catch(OperationCanceledException) {
                 pipe?.Dispose();break;
             } catch {
