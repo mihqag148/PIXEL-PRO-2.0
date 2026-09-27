@@ -193,7 +193,7 @@ public static class HidShortcut {
                 "KP_ENTER"=>88,"KP_1"=>89,"KP_2"=>90,"KP_3"=>91,"KP_4"=>92,"KP_5"=>93,
                 "KP_6"=>94,"KP_7"=>95,"KP_8"=>96,"KP_9"=>97,"KP_0"=>98,"KP_DOT"=>99,
                 "MENU"=>101,"POWER"=>102,"KP_EQUAL"=>103,
-                _ when p.StartsWith('F')&&int.TryParse(p[1..],out int fn)&&fn is >=1 and <=24 => 57+fn,
+                _ when p.StartsWith('F')&&int.TryParse(p[1..],out int fn)&&fn is >=1 and <=24 => fn<=12?57+fn:91+fn,
                 _=>0
             };
             if(usage==0)return false;
@@ -219,7 +219,7 @@ public static class HidShortcut {
             88=>"KP_ENTER",89=>"KP_1",90=>"KP_2",91=>"KP_3",92=>"KP_4",93=>"KP_5",
             94=>"KP_6",95=>"KP_7",96=>"KP_8",97=>"KP_9",98=>"KP_0",99=>"KP_DOT",
             101=>"MENU",102=>"POWER",103=>"KP_EQUAL",
-            >=58 and <=81 when usage is not (70 or 71 or 72 or 73 or 74 or 75 or 76 or 77 or 78 or 79 or 80 or 81) => $"F{usage-57}",
+            >=58 and <=69 => $"F{usage-57}",
             >=104 and <=115 => $"F{usage-91}",
             _=>$"HID{usage}"
         };
