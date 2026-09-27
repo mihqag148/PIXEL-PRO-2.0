@@ -142,6 +142,10 @@ void reportKeys() {
   keyboard.sendReport(&report);
 }
 
+bool ensureFlash(bool allowFormat);
+void selectProfile(int p);
+void consumer(uint16_t code);
+
 bool validMediaCode(uint16_t code) {
   return code==0xE9||code==0xEA||code==0xE2||code==0xCD||
          code==0xB5||code==0xB6||code==0xB7;
