@@ -48,7 +48,8 @@ TouchCalibration touchCal{0x50544331,942,139,136,907};
 UploadState upload;
 uint8_t profile=0;
 uint8_t displayMode=0;
-uint16_t saverSeconds=30;
+uint16_t saverSeconds=30,screenOffSeconds=0;
+bool panelAwake=true;
 Pixel::Debounce keys[8],push,touch;
 bool suppressed[8]{};
 Pixel::Binding held[8]{};
@@ -112,6 +113,9 @@ void loadConfig() {
   }
   saverSeconds=prefs.getUShort("saver",30);
   if(saverSeconds>3600)saverSeconds=30;
+  screenOffSeconds=prefs.getUShort("screenoff",0);
+  if(screenOffSeconds!=0&&screenOffSeconds!=30&&screenOffSeconds!=300&&screenOffSeconds!=900)
+    screenOffSeconds=0;
 }
 
 void emit(const String& text) {
@@ -276,6 +280,12 @@ void stopSaver() {
 void userActivity() {
   lastInput=millis();
   if(mediaActive)stopSaver();
+  if(!panelAwake) {
+    panel.displayOn();
+    panelAwake=true;
+    displayDirty=true;
+    dirtyTiles=255;
+  }
 }
 
 void selectProfile(int p) {
@@ -546,7 +556,7 @@ void drawMonitorScreen() {
 }
 
 void render() {
-  if(mediaActive||calibrating||monitorActive)return;
+  if(!panelAwake||mediaActive||calibrating||monitorActive)return;
   if(displayDirty) {
     panel.fillScreen(0x0843);
     panel.setTextSize(2);
@@ -716,8 +726,15 @@ void request(char* line) {
     ok("DISPLAY");return;
   }
   if(cmd=="STATE"&&n==2) {
-    ok(String(profile)+"|"+String(config.brightness)+"|"+String(saverSeconds));
+    ok(String(profile)+"|"+String(config.brightness)+"|"+String(saverSeconds)+"|"+String(screenOffSeconds));
     return;
+  }
+  if(cmd=="SCREENOFF"&&n==3&&Pixel::number(tokens[2],900,v)&&
+     (v==0||v==30||v==300||v==900)) {
+    if(prefs.putUShort("screenoff",v)!=2){error("STORAGE");return;}
+    screenOffSeconds=v;
+    userActivity();
+    ok("SCREENOFF");return;
   }
   if(cmd=="SAVER"&&n==3&&Pixel::number(tokens[2],3600,v)) {
     if(prefs.putUShort("saver",v)!=2){error("STORAGE");return;}
@@ -964,9 +981,16 @@ void loop() {
 
   scanTouch(now);
 
-  if(!calibrating&&!mediaActive&&saverSeconds>0&&uint32_t(now-lastInput)>=uint32_t(saverSeconds)*1000UL)
+  if(panelAwake&&!calibrating&&screenOffSeconds>0&&
+     uint32_t(now-lastInput)>=uint32_t(screenOffSeconds)*1000UL) {
+    stopSaver();
+    panel.displayOff();
+    panelAwake=false;
+  }
+  if(panelAwake&&!calibrating&&!mediaActive&&saverSeconds>0&&
+     uint32_t(now-lastInput)>=uint32_t(saverSeconds)*1000UL)
     startSaver(now);
-  if(mediaActive)playSaver(now);
+  if(panelAwake&&mediaActive)playSaver(now);
   else render();
 
   delay(1);
