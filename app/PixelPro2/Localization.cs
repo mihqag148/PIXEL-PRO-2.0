@@ -48,6 +48,8 @@ public static class UiText {
         ["Save Draft"]=("Lưu bản nháp","保存草稿"),
         ["Actions"]=("Hành động","动作"),
         ["Integrated Plugins"]=("Plugin tích hợp","集成插件"),
+        ["Plugin Service"]=("Dịch vụ Plugin","插件服务"),
+        ["Enable Named Pipe Service"]=("Bật dịch vụ Named Pipe","启用命名管道服务"),
         ["PC Monitoring"]=("Giám sát PC","电脑监控"),
         ["PC Monitoring Plugin"]=("Plugin giám sát PC","电脑监控插件"),
         ["Music Player"]=("Trình phát nhạc","音乐播放器"),
