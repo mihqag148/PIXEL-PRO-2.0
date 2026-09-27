@@ -58,6 +58,22 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('profileBank=(profile/5)*5',firmware)
         self.assertIn('Pixel::number(tokens[2],Pixel::Profiles-1,p)',firmware)
 
+    def test_studio_parity_guards(self):
+        studio=(ROOT/'app/PixelPro2/StudioForm.cs').read_text()
+        device=(ROOT/'app/PixelPro2/Device.cs').read_text()
+        hub=(ROOT/'app/PixelPro2/DeviceHub.cs').read_text()
+        models=(ROOT/'app/PixelPro2/Models.cs').read_text()
+        self.assertIn('readonly DeviceHub device=new();',studio)
+        self.assertIn('BuildPlugins()',studio)
+        self.assertIn('PresetGalleryForm',studio)
+        self.assertIn('Music Player Plugin (SMTC)',studio)
+        self.assertIn('language.SelectedIndexChanged',studio)
+        self.assertIn('new("Script","Script"',studio)
+        self.assertIn('>=DeviceLimits.Profiles',device)
+        self.assertIn('Dictionary<string,Device>',hub)
+        self.assertIn('public static class EezScript',models)
+        self.assertIn('F24',models)
+
     def test_native_hid_script_engine_present(self):
         firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
         model=(ROOT/'firmware/PixelPro2/Model.h').read_text()
@@ -67,8 +83,15 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('runScript(now);',firmware)
         self.assertIn('memcmp(d,"PXS2",4)',firmware)
         self.assertIn('steps>512',firmware)
+        self.assertIn('type==9',firmware)
+        self.assertIn('type==12',firmware)
+        self.assertIn('type==13',firmware)
+        self.assertIn('mouse.move(x,y,0)',firmware)
         self.assertIn('screenOffSeconds',firmware)
         self.assertIn('cmd=="SCREENOFF"',firmware)
+        self.assertIn('cmd=="MUSIC"',firmware)
+        self.assertIn('drawMusicScreen()',firmware)
+        self.assertIn('monitorActive||musicActive',firmware)
 
 if __name__=='__main__':
     unittest.main()
