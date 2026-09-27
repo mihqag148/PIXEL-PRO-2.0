@@ -3,10 +3,10 @@
 #include "../firmware/PixelPro2/Model.h"
 #include "../firmware/PixelPro2/DisplayMode.h"
 int main() {
-  assert(Pixel::displayMadctl(0)==0x28);
-  assert(Pixel::displayMadctl(1)==0xE8);
-  assert(Pixel::displayMadctl(2)==0xA8);
-  assert(Pixel::displayMadctl(3)==0x68);
+  assert(Pixel::displayMadctl(0)==0x68);
+  assert(Pixel::displayMadctl(1)==0xA8);
+  assert(Pixel::displayMadctl(2)==0xE8);
+  assert(Pixel::displayMadctl(3)==0x28);
   int x=0,y=0;Pixel::orientTouch(1,x,y);assert(x==479&&y==319);
   for(int mode=0;mode<4;++mode)for(int px:{0,95,96,479})for(int py:{0,281,319}) {
     int tx=px,ty=py;Pixel::orientTouch(mode,tx,ty);
