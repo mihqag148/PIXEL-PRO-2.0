@@ -1,10 +1,10 @@
-# Studio Windows 2.2
+# Studio Windows 2.2.1
 
 Studio 2.2 is the desktop configurator/background host for PIXEL PRO 2.0.
 
 ## Kết nối
 
-- **Tự tìm phím** quét các COM hiện có, mở từng cổng với DTR+RTS, retry HELLO và chỉ giữ cổng trả về đúng `PIXELPRO2`.
+- **Tự tìm phím** quét các COM hiện có, mở từng cổng với **DTR trước rồi RTS**, retry HELLO và chỉ giữ cổng trả về đúng `PIXELPRO2`.
 - Firmware tắt native-USBCDC reboot-by-line-state để việc mở/đóng Studio không đá ESP32-S2 vào bootloader.
 - Có thể chọn COM thủ công bằng **Kết nối**.
 - Mất COM sẽ tắt quyền chạy macro host và ghi lỗi vào log.
@@ -60,4 +60,4 @@ Select a profile and K1…K8, then choose **Tải icon phím**. PNG/JPG/BMP/GIF 
 
 ## Display
 
-Orientation 0…3 is persisted separately from keymap. RGB, touch, media and key icons are designed for MCUFRIEND/HX8357-B 480×320 on the existing PIXEL PRO 2.0 pinout.
+Orientation 0…3 is persisted separately from keymap. Bản 2.2.1 dùng gốc landscape đã hiệu chỉnh cho panel thực tế (`0x68`) và bỏ giá trị orientation cũ của 2.2.0 trong lần migrate đầu. RGB, touch, media và key icons dùng cùng transform.
