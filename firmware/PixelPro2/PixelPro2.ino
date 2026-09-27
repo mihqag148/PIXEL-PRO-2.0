@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 #include <USB.h>
 #include <USBCDC.h>
 #include <USBHIDKeyboard.h>
@@ -29,7 +30,8 @@ struct Configuration {
 };
 struct TouchCalibration {
   uint32_t magic;
-  int16_t left,right,top,bottom;
+  float ax,bx,cx;
+  float ay,by,cy;
 };
 struct UploadState {
   bool active=false;
@@ -44,13 +46,14 @@ struct UploadState {
 };
 
 Configuration config{};
-TouchCalibration touchCal{0x50544331,942,139,136,907};
+TouchCalibration touchCal{0x50544332,0,0,0,0,0,0};
+bool touchCalValid=false;
 UploadState upload;
 uint8_t profile=0;
 uint8_t displayMode=0;
 uint16_t saverSeconds=30,screenOffSeconds=0;
 bool panelAwake=true;
-Pixel::Debounce keys[8],push,touch;
+Pixel::Debounce keys[8],push;
 bool suppressed[8]{};
 Pixel::Binding held[8]{};
 Pixel::LineBuffer<192> input;
@@ -60,10 +63,14 @@ uint32_t lastScan=0,lastTouch=0,lastInput=0;
 uint16_t consumerHeld=0;
 uint32_t consumerUntil=0;
 
-// Touch calibration
-bool calibrating=false;
-uint8_t calPoint=0;
-int calRawX[4]{},calRawY[4]{};
+// Touch calibration / filtering. Raw axes follow TouchScreen.h:
+// rawX is sampled on YP(D13); rawY is sampled on XM(D14).
+bool calibrating=false,touchStablePressed=false,touchDiag=false;
+uint8_t calPoint=0,touchPressConfirmations=0,touchReleaseMisses=0,calSampleCount=0;
+uint16_t touchCandidateX=0,touchCandidateY=0;
+uint16_t calRawX[4]{},calRawY[4]{};
+uint16_t calSamplesX[7]{},calSamplesY[7]{};
+uint32_t touchPressStartedAt=0,lastTouchDiag=0;
 
 // Media player
 File mediaFile;
@@ -106,10 +113,17 @@ void loadConfig() {
     if(valid)config=saved;
   }
   TouchCalibration tc{};
-  if(prefs.getBytesLength("touchcal")==sizeof(tc)) {
-    prefs.getBytes("touchcal",&tc,sizeof(tc));
-    if(tc.magic==touchCal.magic&&abs(tc.left-tc.right)>250&&abs(tc.top-tc.bottom)>250)
-      touchCal=tc;
+  if(prefs.getBytesLength("touchcal2")==sizeof(tc)) {
+    prefs.getBytes("touchcal2",&tc,sizeof(tc));
+    const float values[6]={tc.ax,tc.bx,tc.cx,tc.ay,tc.by,tc.cy};
+    bool valid=tc.magic==touchCal.magic;
+    for(float value:values)valid=valid&&isfinite(value);
+    valid=valid&&(fabsf(tc.ax)+fabsf(tc.bx)>0.02f)&&
+                (fabsf(tc.ay)+fabsf(tc.by)>0.02f)&&
+                fabsf(tc.ax)<10.0f&&fabsf(tc.bx)<10.0f&&
+                fabsf(tc.ay)<10.0f&&fabsf(tc.by)<10.0f&&
+                fabsf(tc.cx)<10000.0f&&fabsf(tc.cy)<10000.0f;
+    if(valid){touchCal=tc;touchCalValid=true;}
   }
   saverSeconds=prefs.getUShort("saver",30);
   if(saverSeconds>3600)saverSeconds=30;
@@ -359,109 +373,284 @@ void scanKeys(uint32_t now) {
   if(accumulator<=-4){userActivity();consumer(0xEA);accumulator=0;}
 }
 
-bool rawTouch(int& rawX,int& rawY,int& pressure) {
-  constexpr int xp=39,xm=14,yp=13,ym=40;
-  auto median5=[](int pin) {
-    int v[5];
-    for(int i=0;i<5;i++)v[i]=analogRead(pin);
-    for(int i=1;i<5;i++) {
-      int x=v[i],j=i-1;
-      while(j>=0&&v[j]>x){v[j+1]=v[j];j--;}
-      v[j+1]=x;
-    }
-    return v[2];
-  };
+static uint16_t touchDelta(uint16_t a,uint16_t b) {
+  return a>=b?a-b:b-a;
+}
 
-  digitalWrite(Pins::cs,HIGH);
+static uint16_t touchMedian3(uint16_t a,uint16_t b,uint16_t c) {
+  if(a>b){uint16_t t=a;a=b;b=t;}
+  if(b>c){uint16_t t=b;b=c;c=t;}
+  if(a>b){uint16_t t=a;a=b;b=t;}
+  return b;
+}
 
+static uint16_t touchMedian7(uint16_t* v) {
+  for(int i=1;i<7;i++) {
+    uint16_t x=v[i];int j=i-1;
+    while(j>=0&&v[j]>x){v[j+1]=v[j];j--;}
+    v[j+1]=x;
+  }
+  return v[3];
+}
+
+static void restoreTouchSharedPins() {
+  digitalWrite(Pins::cs,HIGH);pinMode(Pins::cs,OUTPUT);
+  pinMode(13,OUTPUT);digitalWrite(13,HIGH);
+  pinMode(14,OUTPUT);digitalWrite(14,HIGH);
+  pinMode(39,OUTPUT);digitalWrite(39,LOW);
+  pinMode(40,OUTPUT);digitalWrite(40,LOW);
+  delayMicroseconds(4);
+}
+
+static uint16_t readTouchAdc10(uint8_t pin) {
+  (void)analogRead(pin);
+  uint32_t sum=0;
+  for(int i=0;i<3;i++){sum+=uint16_t(analogRead(pin));delayMicroseconds(8);}
+  return uint16_t(sum/3U);
+}
+
+static void sampleTouchCoordinates(uint16_t& rawX,uint16_t& rawY) {
+  constexpr uint8_t xp=39,xm=14,yp=13,ym=40;
+  pinMode(Pins::cs,OUTPUT);digitalWrite(Pins::cs,HIGH);
+
+  digitalWrite(yp,LOW);digitalWrite(ym,LOW);
   pinMode(yp,INPUT);pinMode(ym,INPUT);
-  pinMode(xp,OUTPUT);digitalWrite(xp,HIGH);
-  pinMode(xm,OUTPUT);digitalWrite(xm,LOW);
-  delayMicroseconds(15);
-  int rx=1023-median5(yp);
+  pinMode(xp,OUTPUT);pinMode(xm,OUTPUT);
+  digitalWrite(xp,HIGH);digitalWrite(xm,LOW);
+  delayMicroseconds(28);
+  rawX=uint16_t(1023-readTouchAdc10(yp));
 
+  digitalWrite(xp,LOW);digitalWrite(xm,LOW);
   pinMode(xp,INPUT);pinMode(xm,INPUT);
-  pinMode(yp,OUTPUT);digitalWrite(yp,HIGH);
-  pinMode(ym,OUTPUT);digitalWrite(ym,LOW);
-  delayMicroseconds(15);
-  int ry=1023-median5(xm);
+  pinMode(yp,OUTPUT);pinMode(ym,OUTPUT);
+  digitalWrite(yp,HIGH);digitalWrite(ym,LOW);
+  delayMicroseconds(28);
+  rawY=uint16_t(1023-readTouchAdc10(xm));
+}
 
-  pinMode(xp,OUTPUT);digitalWrite(xp,LOW);
-  pinMode(ym,OUTPUT);digitalWrite(ym,HIGH);
-  pinMode(xm,INPUT);pinMode(yp,INPUT);
-  delayMicroseconds(15);
-  int z1=median5(xm),z2=median5(yp);
+static bool readTouchRaw(uint16_t& rawX,uint16_t& rawY,uint16_t& quality) {
+  uint16_t x1=0,y1=0,x2=0,y2=0,x3=0,y3=0;
+  sampleTouchCoordinates(x1,y1);delayMicroseconds(90);
+  sampleTouchCoordinates(x2,y2);delayMicroseconds(90);
+  sampleTouchCoordinates(x3,y3);
+  restoreTouchSharedPins();
 
-  panel.restore();
+  rawX=touchMedian3(x1,x2,x3);
+  rawY=touchMedian3(y1,y2,y3);
+  uint16_t spreadX=max(x1,max(x2,x3))-min(x1,min(x2,x3));
+  uint16_t spreadY=max(y1,max(y2,y3))-min(y1,min(y2,y3));
 
-  // Standard 4-wire resistive-touch pressure score: firmer presses approach
-  // 1023. The previous resistance threshold rejected many normal/firm taps.
-  pressure=constrain(1023-abs(z2-z1),0,1023);
-  rawX=ry;
-  rawY=rx;
-  return pressure>=45&&rawX>=20&&rawX<=1003&&rawY>=20&&rawY<=1003;
+  bool inside=rawX>=18&&rawX<=1005&&rawY>=18&&rawY<=1005;
+  bool stable=spreadX<=180&&spreadY<=180;
+  quality=uint16_t(constrain(1023-int(spreadX+spreadY)*2,0,1023));
+  return inside&&stable;
+}
+
+static bool validTouchAffine(const TouchCalibration& affine) {
+  const float values[6]={affine.ax,affine.bx,affine.cx,affine.ay,affine.by,affine.cy};
+  for(float value:values)if(!isfinite(value))return false;
+  if(fabsf(affine.ax)>10.0f||fabsf(affine.bx)>10.0f||
+     fabsf(affine.ay)>10.0f||fabsf(affine.by)>10.0f||
+     fabsf(affine.cx)>10000.0f||fabsf(affine.cy)>10000.0f)return false;
+  return fabsf(affine.ax)+fabsf(affine.bx)>0.02f&&
+         fabsf(affine.ay)+fabsf(affine.by)>0.02f;
+}
+
+static void mapTouchBase(uint16_t rawX,uint16_t rawY,int& x,int& y) {
+  if(touchCalValid) {
+    x=int(lroundf(touchCal.ax*rawX+touchCal.bx*rawY+touchCal.cx));
+    y=int(lroundf(touchCal.ay*rawX+touchCal.by*rawY+touchCal.cy));
+  } else {
+    x=int(map(long(rawY),942L,139L,0L,479L));
+    y=int(map(long(rawX),136L,907L,0L,319L));
+  }
+  x=constrain(x,0,479);y=constrain(y,0,319);
+}
+
+static void mapTouch(uint16_t rawX,uint16_t rawY,int& x,int& y) {
+  mapTouchBase(rawX,rawY,x,y);
+  Pixel::orientTouch(displayMode,x,y);
 }
 
 void drawCalibrationTarget() {
-  static const int tx[4]={24,455,455,24};
-  static const int ty[4]={24,24,295,295};
+  static const int tx[4]={40,439,439,40};
+  static const int ty[4]={40,40,279,279};
   panel.fillScreen(0x0000);
   panel.setTextColor(0xFFFF);
   panel.setTextSize(2);
-  panel.setCursor(145,145);
-  panel.print("TOUCH ");
+  panel.setCursor(130,12);
+  panel.print("TOUCH CALIBRATION");
+  panel.setTextSize(1);
+  panel.setCursor(190,38);
+  panel.print("Point ");
   panel.print(calPoint+1);
-  panel.print("/4");
+  panel.print(" / 4");
   int x=tx[calPoint],y=ty[calPoint];
-  panel.drawLine(x-12,y,x+12,y,0xFFFF);
-  panel.drawLine(x,y-12,x,y+12,0xFFFF);
-  panel.drawCircle(x,y,7,0xF800);
+  panel.drawCircle(x,y,14,0xFFFF);
+  panel.drawCircle(x,y,15,0xFFFF);
+  panel.drawLine(x-24,y,x+24,y,0xFFFF);
+  panel.drawLine(x,y-24,x,y+24,0xFFFF);
 }
 
-void finishCalibration() {
-  TouchCalibration next{
-    touchCal.magic,
-    int16_t((calRawX[0]+calRawX[3])/2),
-    int16_t((calRawX[1]+calRawX[2])/2),
-    int16_t((calRawY[0]+calRawY[1])/2),
-    int16_t((calRawY[2]+calRawY[3])/2)
-  };
-  calibrating=false;
-  panel.orientation(displayMode);
-  if(abs(next.left-next.right)>250&&abs(next.top-next.bottom)>250&&
-     prefs.putBytes("touchcal",&next,sizeof(next))==sizeof(next)) {
-    touchCal=next;
-    emit("E|CALDONE|"+String(next.left)+"|"+String(next.right)+"|"+
-         String(next.top)+"|"+String(next.bottom));
-  } else emit("E|CALFAIL|RANGE");
-  displayDirty=true;
-  dirtyTiles=255;
-  userActivity();
+static bool finishCalibration() {
+  const float r0x=calRawX[0],r0y=calRawY[0];
+  const float r1x=calRawX[1],r1y=calRawY[1];
+  const float r2x=calRawX[2],r2y=calRawY[2];
+  const float r3x=calRawX[3],r3y=calRawY[3];
+
+  const float centerX=(r0x+r1x+r2x+r3x)*0.25f;
+  const float centerY=(r0y+r1y+r2y+r3y)*0.25f;
+  const float ux=(r1x+r2x-r0x-r3x)*0.25f;
+  const float uy=(r1y+r2y-r0y-r3y)*0.25f;
+  const float vx=(r2x+r3x-r0x-r1x)*0.25f;
+  const float vy=(r2y+r3y-r0y-r1y)*0.25f;
+  const float determinant=ux*vy-uy*vx;
+  if(!isfinite(determinant)||fabsf(determinant)<1500.0f)return false;
+
+  constexpr float centerScreenX=(40.0f+439.0f)*0.5f;
+  constexpr float centerScreenY=(40.0f+279.0f)*0.5f;
+  constexpr float halfScreenX=(439.0f-40.0f)*0.5f;
+  constexpr float halfScreenY=(279.0f-40.0f)*0.5f;
+
+  TouchCalibration next{};
+  next.magic=touchCal.magic;
+  next.ax=halfScreenX*vy/determinant;
+  next.bx=-halfScreenX*vx/determinant;
+  next.cx=centerScreenX-next.ax*centerX-next.bx*centerY;
+  next.ay=-halfScreenY*uy/determinant;
+  next.by=halfScreenY*ux/determinant;
+  next.cy=centerScreenY-next.ay*centerX-next.by*centerY;
+  if(!validTouchAffine(next))return false;
+
+  static const float targetX[4]={40,439,439,40};
+  static const float targetY[4]={40,40,279,279};
+  float worst=0;
+  for(int i=0;i<4;i++) {
+    float mx=next.ax*calRawX[i]+next.bx*calRawY[i]+next.cx;
+    float my=next.ay*calRawX[i]+next.by*calRawY[i]+next.cy;
+    float dx=mx-targetX[i],dy=my-targetY[i];
+    worst=max(worst,sqrtf(dx*dx+dy*dy));
+  }
+  if(!isfinite(worst)||worst>55.0f)return false;
+  if(prefs.putBytes("touchcal2",&next,sizeof(next))!=sizeof(next))return false;
+
+  touchCal=next;
+  touchCalValid=true;
+  return true;
+}
+
+static void resetTouchState() {
+  touchStablePressed=false;
+  touchPressConfirmations=0;
+  touchReleaseMisses=0;
+  touchCandidateX=touchCandidateY=0;
+  touchPressStartedAt=0;
+  calSampleCount=0;
+}
+
+static void beginCalibration() {
+  calibrating=true;
+  calPoint=0;
+  memset(calRawX,0,sizeof(calRawX));
+  memset(calRawY,0,sizeof(calRawY));
+  resetTouchState();
+  panel.orientation(0);
+  drawCalibrationTarget();
 }
 
 void scanTouch(uint32_t now) {
-  if(uint32_t(now-lastTouch)<8)return;
+  constexpr uint32_t pollMs=10;
+  constexpr uint8_t confirmCount=2;
+  constexpr uint8_t releaseMissCount=3;
+  constexpr uint16_t confirmMove=90;
+
+  if(uint32_t(now-lastTouch)<pollMs)return;
   lastTouch=now;
-  int rx=0,ry=0,pressure=0;
-  bool down=rawTouch(rx,ry,pressure);
-  if(touch.update(down,now)&&touch.stable) {
-    userActivity();
+
+  uint16_t rawX=0,rawY=0,quality=0;
+  bool pressed=readTouchRaw(rawX,rawY,quality);
+
+  if(touchDiag&&uint32_t(now-lastTouchDiag)>=80) {
+    lastTouchDiag=now;
+    int dx=-1,dy=-1;
+    if(pressed)mapTouch(rawX,rawY,dx,dy);
+    emit("E|TOUCHRAW|"+String(pressed?1:0)+"|"+String(rawX)+"|"+
+         String(rawY)+"|"+String(quality)+"|"+String(dx)+"|"+String(dy));
+  }
+
+  if(pressed) {
+    touchReleaseMisses=0;
+    if(!touchStablePressed) {
+      if(touchPressConfirmations==0)touchPressConfirmations=1;
+      else if(touchDelta(rawX,touchCandidateX)<=confirmMove&&
+              touchDelta(rawY,touchCandidateY)<=confirmMove) {
+        if(touchPressConfirmations<confirmCount)touchPressConfirmations++;
+      } else touchPressConfirmations=1;
+      touchCandidateX=rawX;touchCandidateY=rawY;
+      if(touchPressConfirmations<confirmCount)return;
+      touchStablePressed=true;
+      touchPressConfirmations=0;
+      touchPressStartedAt=now;
+      calSampleCount=0;
+      userActivity();
+    }
+
     if(calibrating) {
-      calRawX[calPoint]=rx;
-      calRawY[calPoint]=ry;
-      calPoint++;
-      if(calPoint>=4)finishCalibration();
-      else drawCalibrationTarget();
+      if(calSampleCount<7) {
+        calSamplesX[calSampleCount]=rawX;
+        calSamplesY[calSampleCount]=rawY;
+        calSampleCount++;
+      }
       return;
     }
-    // Calibration crosshairs are at 24..455 / 24..295, not at the panel
-    // edges. Map those exact target coordinates and allow linear extrapolation
-    // to the physical edges before constraining.
-    int x=constrain(map(rx,touchCal.left,touchCal.right,24,455),0,479);
-    int y=constrain(map(ry,touchCal.top,touchCal.bottom,24,295),0,319);
-    Pixel::orientTouch(displayMode,x,y);
-    if(y>=280)selectProfile(constrain(x/96,0,4));
-    emit("E|TOUCH|"+String(x)+"|"+String(y)+"|"+String(pressure));
+
+    int x=0,y=0;
+    mapTouch(rawX,rawY,x,y);
+    if(now==touchPressStartedAt) {
+      if(y>=280)selectProfile(constrain(x/96,0,4));
+      emit("E|TOUCH|"+String(x)+"|"+String(y)+"|"+String(quality));
+    }
+    return;
+  }
+
+  touchPressConfirmations=0;
+  touchCandidateX=touchCandidateY=0;
+  if(!touchStablePressed){touchReleaseMisses=0;return;}
+  if(touchReleaseMisses<releaseMissCount)touchReleaseMisses++;
+  if(touchReleaseMisses<releaseMissCount)return;
+
+  touchReleaseMisses=0;
+  touchStablePressed=false;
+
+  if(calibrating) {
+    if(calSampleCount<3) {
+      emit("E|CALWAIT|"+String(calPoint+1)+"|HOLD");
+      calSampleCount=0;
+      return;
+    }
+    for(uint8_t i=calSampleCount;i<7;i++) {
+      calSamplesX[i]=calSamplesX[calSampleCount-1];
+      calSamplesY[i]=calSamplesY[calSampleCount-1];
+    }
+    calRawX[calPoint]=touchMedian7(calSamplesX);
+    calRawY[calPoint]=touchMedian7(calSamplesY);
+    emit("E|CALPOINT|"+String(calPoint+1)+"|"+String(calRawX[calPoint])+"|"+
+         String(calRawY[calPoint]));
+    calSampleCount=0;
+    calPoint++;
+
+    if(calPoint>=4) {
+      bool ok=finishCalibration();
+      calibrating=false;
+      panel.orientation(displayMode);
+      displayDirty=true;dirtyTiles=255;
+      if(ok) {
+        emit("E|CALDONE|AFFINE|"+String(touchCal.ax,6)+"|"+String(touchCal.bx,6)+"|"+
+             String(touchCal.cx,3)+"|"+String(touchCal.ay,6)+"|"+
+             String(touchCal.by,6)+"|"+String(touchCal.cy,3));
+      } else emit("E|CALFAIL|BAD_GEOMETRY");
+      userActivity();
+    } else drawCalibrationTarget();
   }
 }
 
@@ -714,7 +903,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
+    ok("PIXELPRO2|2.3.1|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -797,16 +986,25 @@ void request(char* line) {
   if(cmd=="TOUCHCAL"&&n==3&&strcmp(tokens[2],"START")==0) {
     monitorActive=false;
     stopSaver();
-    calibrating=true;
-    calPoint=0;
-    panel.orientation(0);
-    drawCalibrationTarget();
+    beginCalibration();
     ok("STARTED");
     return;
   }
   if(cmd=="TOUCHCAL"&&n==3&&strcmp(tokens[2],"GET")==0) {
-    ok(String(touchCal.left)+"|"+String(touchCal.right)+"|"+
-       String(touchCal.top)+"|"+String(touchCal.bottom));
+    if(!touchCalValid){ok("DEFAULT");return;}
+    ok("AFFINE|"+String(touchCal.ax,6)+"|"+String(touchCal.bx,6)+"|"+
+       String(touchCal.cx,3)+"|"+String(touchCal.ay,6)+"|"+
+       String(touchCal.by,6)+"|"+String(touchCal.cy,3));
+    return;
+  }
+  if(cmd=="TOUCHCAL"&&n==3&&strcmp(tokens[2],"RESET")==0) {
+    prefs.remove("touchcal2");
+    touchCalValid=false;
+    ok("RESET");return;
+  }
+  if(cmd=="TOUCHDIAG"&&n==3&&(strcmp(tokens[2],"ON")==0||strcmp(tokens[2],"OFF")==0)) {
+    touchDiag=strcmp(tokens[2],"ON")==0;
+    ok(touchDiag?"ON":"OFF");
     return;
   }
   if(cmd=="MEDIA"&&n==3&&strcmp(tokens[2],"INFO")==0) {
@@ -942,6 +1140,7 @@ void setup() {
   leds.clear();
   leds.show();
   panel.begin(displayMode);
+  restoreTouchSharedPins();
 
   // Draw the key UI before touching optional filesystems so the device feels
   // ready immediately after reset/flash.
