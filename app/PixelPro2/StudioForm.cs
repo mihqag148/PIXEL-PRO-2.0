@@ -73,6 +73,7 @@ public sealed class StudioForm : Form {
     readonly NumericUpDown brightness=new(){Minimum=0,Maximum=80,Value=24,Width=80};
     readonly NumericUpDown saverSeconds=new(){Minimum=0,Maximum=3600,Value=30,Width=90};
     readonly ComboBox screenOff=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=150};
+    readonly ComboBox language=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=125};
     readonly ComboBox orientation=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=220};
     readonly ProgressBar transfer=new(){Width=260,Height=22,Minimum=0,Maximum=100};
     readonly DataGridView autoGrid=new(){
@@ -84,6 +85,8 @@ public sealed class StudioForm : Form {
     readonly System.Windows.Forms.Timer musicTimer=new(){Interval=1000};
     readonly System.Windows.Forms.Timer autoProfileTimer=new(){Interval=600};
     readonly NotifyIcon tray=new(){Icon=SystemIcons.Application,Text="PIXEL PRO 2.0"};
+    readonly Dictionary<Control,string> languageBase=new();
+    string languageCode="en";
 
     readonly string localPath=Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -94,6 +97,9 @@ public sealed class StudioForm : Form {
     readonly string legacyLocalPathV2=Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PixelPro2","preset.json");
+    readonly string languagePath=Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PixelPro2","language.txt");
 
     public StudioForm() {
         Text="PIXEL PRO 2.0 · Studio 2.4";
@@ -107,6 +113,8 @@ public sealed class StudioForm : Form {
         orientation.SelectedIndex=0;
         screenOff.Items.AddRange(["Always On","30 seconds","5 minutes","15 minutes"]);
         screenOff.SelectedIndex=0;
+        language.Items.AddRange(["English","Tiếng Việt","简体中文"]);
+        language.SelectedIndex=0;
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Margin=Padding.Empty};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
@@ -151,6 +159,15 @@ public sealed class StudioForm : Form {
         LoadRulesGrid();
         RefreshPorts();
         LoadEditor();
+        CaptureLanguageBase(this);
+        if(File.Exists(languagePath)) {
+            string saved=File.ReadAllText(languagePath).Trim().ToLowerInvariant();
+            if(saved is "vi" or "zh")languageCode=saved;
+        }
+        loading=true;
+        language.SelectedIndex=languageCode=="vi"?1:languageCode=="zh"?2:0;
+        loading=false;
+        ApplyLanguage();
         autoProfileTimer.Start();
         ApplyTheme(false);
     }
@@ -180,6 +197,7 @@ public sealed class StudioForm : Form {
         tools.Controls.Add(MakeButton("Presets",OpenPresetGallery));
         tools.Controls.Add(MakeButton("Firmware",OpenFirmwarePage));
         tools.Controls.Add(MakeButton("Light / Dark",()=>{dark=!dark;ApplyTheme(dark);return Task.CompletedTask;}));
+        tools.Controls.Add(language);
         panel.Controls.Add(tools);
         return panel;
     }
@@ -625,6 +643,13 @@ public sealed class StudioForm : Form {
         musicPluginToggle.CheckedChanged+=(_,_)=>{
             if(loading)return;
             Guard(()=>SetMusicEnabled(musicPluginToggle.Checked));
+        };
+        language.SelectedIndexChanged+=(_,_)=>{
+            if(loading)return;
+            languageCode=language.SelectedIndex switch {1=>"vi",2=>"zh",_=>"en"};
+            Directory.CreateDirectory(Path.GetDirectoryName(languagePath)!);
+            File.WriteAllText(languagePath,languageCode);
+            ApplyLanguage();
         };
 
         device.Event+=e=>OnUi(()=>HandleEvent(e));
@@ -1453,6 +1478,34 @@ public sealed class StudioForm : Form {
 
     void SaveLocalQuiet() {
         try{SaveEditor();SaveRulesGrid();SaveLocal();}catch{}
+    }
+
+    void CaptureLanguageBase(Control parent) {
+        foreach(Control control in parent.Controls) {
+            if(!languageBase.ContainsKey(control))languageBase[control]=control.Text;
+            CaptureLanguageBase(control);
+        }
+    }
+
+    void ApplyLanguage() {
+        CaptureLanguageBase(this);
+        foreach(var pair in languageBase.ToArray()) {
+            if(pair.Key.IsDisposed)continue;
+            if(pair.Key.Tag is ActionDef action) {
+                pair.Key.Text=ActionGlyph(action.Type)+"\n"+UiText.ActionName(action.Type,action.Name,languageCode);
+                continue;
+            }
+            string source=pair.Value;
+            if(source.StartsWith("Profile & Key Selection",StringComparison.Ordinal))
+                pair.Key.Text=UiText.Translate("Profile & Key Selection",languageCode)+$" · {DeviceLimits.Profiles} profiles";
+            else pair.Key.Text=UiText.Translate(source,languageCode);
+        }
+
+        for(int i=0;i<screenOff.Items.Count;i++) {
+            string english=i switch {0=>"Always On",1=>"30 seconds",2=>"5 minutes",_=>"15 minutes"};
+            screenOff.Items[i]=UiText.Translate(english,languageCode);
+        }
+        RefreshTiles();RefreshProfileButtons();
     }
 
     void ApplyTheme(bool useDark) {
