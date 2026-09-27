@@ -237,6 +237,7 @@ public sealed class MainForm : Form {
                    MessageBoxButtons.YesNo)!=DialogResult.Yes){e.Cancel=true;return;}
             }
             monitorEnabled=false;monitorTimer.Stop();monitorTimer.Dispose();
+            monitorCollector.Dispose();
             shutdown.Cancel();device.Dispose();tray.Dispose();
         };
 
@@ -461,8 +462,10 @@ public sealed class MainForm : Form {
 
     async Task SendMonitorFrame() {
         var s=monitorCollector.Read();
-        await device.Request($"MONITOR|SET|{s.CpuPercent}|{s.GpuPercent}|{s.RamPercent}|{s.DiskPercent}|{s.NetKbps}");
-        monitorInfo.Text=$"Monitor: CPU {s.CpuPercent}% · RAM {s.RamPercent}% · NET {s.NetKbps} kbps";
+        await device.Request($"MONITOR|SET|{s.CpuPercent}|{s.GpuPercent}|{s.RamPercent}|{s.DiskPercent}|{s.NetKbps}|{s.CpuTempC}|{s.GpuTempC}");
+        string ct=s.CpuTempC>0?$"{s.CpuTempC}°C":"--";
+        string gt=s.GpuTempC>0?$"{s.GpuTempC}°C":"--";
+        monitorInfo.Text=$"Monitor: CPU {s.CpuPercent}%/{ct} · GPU {s.GpuPercent}%/{gt} · RAM {s.RamPercent}%";
     }
 
     async Task CalibrateTouch() {
