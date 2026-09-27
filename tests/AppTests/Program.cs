@@ -5,15 +5,16 @@ using Shortcut = PixelPro2.Shortcut;
 static void Check(bool test){if(!test)throw new Exception("Assertion failed");}
 static void Reject(Action action){try{action();}catch(FormatException){return;}throw new Exception("Expected rejection");}
 
-Check(Protocol.CompatibleHello("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,MEDIA,MONITOR,MOUSE,SCRIPT"));
-Check(Protocol.CompatibleHello("PIXELPRO2|2.0.1|5|8|HX8357B|HID,CDC"));
-Check(!Protocol.CompatibleHello("PIXELPRO2|3.0.0|5|8|HX8357B|HID,CDC"));
-Check(!Protocol.CompatibleHello("PIXELPRO2|2.1.0|20|8|HX8357B|HID,CDC"));
+Check(Protocol.CompatibleHello("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,MEDIA,MONITOR,MOUSE,SCRIPT,TOUCHDIAG"));
+Check(!Protocol.CompatibleHello("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC"));
+Check(!Protocol.CompatibleHello("PIXELPRO2|3.0.0|25|8|HX8357B|HID,CDC"));
+Check(!Protocol.CompatibleHello("PIXELPRO2|2.4.0|20|8|HX8357B|HID,CDC"));
 
 var b=Binding.Parse("K|6|1|1215|Copy");
 Check(b.Wire(0,0)=="SET|0|0|K|6|1|1215|Copy");
 Reject(()=>Binding.Parse("K|65535|0|0|Bad"));
-Reject(()=>Binding.Parse("P|5|0|0|Bad"));
+Check(Binding.Parse("P|24|0|0|P25").Code==24);
+Reject(()=>Binding.Parse("P|25|0|0|Bad"));
 Reject(()=>Binding.Parse("H|0|1|0|Bad"));
 Reject(()=>Binding.Parse("C|1234|0|0|Bad"));
 Reject(()=>Binding.Parse("D|0|0|0|too-long-label"));
@@ -48,6 +49,9 @@ Check(MediaCodec.CanEncodeNative([
     new Step{Type="Media",Value="PLAYPAUSE"}
 ]));
 Check(!MediaCodec.CanEncodeNative([new Step{Type="LaunchApp",Value=@"C:\Windows\notepad.exe"}]));
+Check(!MediaCodec.CanEncodeNative([new Step{Type="PowerOff",Value=""}]));
+var powerBinding=new Binding{Type="H",Code=0,Modifiers=0,Label="Power",Steps=[new Step{Type="PowerOff",Value=""}]};
+powerBinding.Validate();
 
 var preset=new Preset();
 preset.Profiles[0][0].Type="H";
@@ -71,8 +75,37 @@ string path=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
 try{
     preset.Save(path);
     var loaded=Preset.Load(path);
-    Check(loaded.Profiles[4][7].Code==11);
-    Check(loaded.Schema==3&&loaded.AutoProfiles.Count==1&&loaded.AutoProfiles[0].Profile==3);
+    Check(loaded.Profiles.Length==DeviceLimits.Profiles);
+    Check(loaded.Profiles[24][7].Code==11);
+    Check(loaded.Schema==4&&loaded.AutoProfiles.Count==1&&loaded.AutoProfiles[0].Profile==3);
 }finally{File.Delete(path);}
 
-Console.WriteLine("App protocol, keymap, macro validation and preset round-trip tests passed.");
+// Migrate a legacy schema-3 five-profile preset into schema 4 / 25 profiles.
+string legacyPath=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
+try {
+    var legacyProfiles=new Preset().Profiles.Take(5).ToArray();
+    legacyProfiles[4][7].Label="Legacy";
+    var legacyJson=System.Text.Json.JsonSerializer.Serialize(new {
+        Schema=3,
+        AutoProfiles=Array.Empty<AutoProfileRule>(),
+        AutoProfileEnabled=true,
+        Profiles=legacyProfiles
+    });
+    File.WriteAllText(legacyPath,legacyJson);
+    var migrated=Preset.Load(legacyPath);
+    Check(migrated.Schema==4&&migrated.Profiles.Length==25);
+    Check(migrated.Profiles[4][7].Label=="Legacy");
+    Check(migrated.Profiles[24][0].Code==4);
+} finally { File.Delete(legacyPath); }
+
+// Single-profile import/export document.
+string profilePath=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".profile.json");
+try {
+    var profileDoc=new ProfilePreset{Keys=new Preset().Profiles[24].ToArray()};
+    profileDoc.Keys[0].Label="Imported";
+    profileDoc.Save(profilePath);
+    var loadedProfile=ProfilePreset.Load(profilePath);
+    Check(loadedProfile.Keys.Length==8&&loadedProfile.Keys[0].Label=="Imported");
+} finally { File.Delete(profilePath); }
+
+Console.WriteLine("App protocol, 25-profile migration, macro validation and preset round-trip tests passed.");
