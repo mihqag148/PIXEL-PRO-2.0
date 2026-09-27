@@ -34,7 +34,9 @@ struct TouchCalibration {
 struct UploadState {
   bool active=false;
   bool icon=false;
+  bool script=false;
   uint8_t iconProfile=0,iconKey=0;
+  uint8_t scriptProfile=0,scriptKey=0;
   uint32_t expected=0,received=0,crcExpected=0,crc=0xFFFFFFFF;
   uint16_t fill=0;
   uint8_t buffer[512];
@@ -69,6 +71,13 @@ uint8_t iconFrame[48*48]{};
 uint16_t mediaW=0,mediaH=0,mediaFrames=0,mediaDelay=100,mediaIndex=0;
 bool mediaActive=false;
 uint32_t mediaNext=0;
+
+// Native HID script (PXS1), loaded on demand from SPIFFS.
+uint8_t scriptData[2048]{};
+uint16_t scriptSize=0,scriptPos=0;
+uint8_t scriptSteps=0;
+bool scriptActive=false;
+uint32_t scriptResumeAt=0;
 
 // Full-screen PC monitor
 bool monitorActive=false;
@@ -133,6 +142,125 @@ void reportKeys() {
   keyboard.sendReport(&report);
 }
 
+bool validMediaCode(uint16_t code) {
+  return code==0xE9||code==0xEA||code==0xE2||code==0xCD||
+         code==0xB5||code==0xB6||code==0xB7;
+}
+
+bool validateScriptBytes(const uint8_t* d,size_t n) {
+  if(!d||n<6||n>sizeof(scriptData)||memcmp(d,"PXS1",4)!=0)return false;
+  uint8_t steps=d[4];
+  if(!steps||steps>32)return false;
+  size_t p=5;
+  for(uint8_t s=0;s<steps;s++) {
+    if(p>=n)return false;
+    uint8_t type=d[p++];
+    if(type==1) {
+      if(p>=n)return false;
+      uint8_t len=d[p++];
+      if(!len||len>96||p+len>n)return false;
+      for(uint8_t i=0;i<len;i++)if(!(d[p+i]==9||d[p+i]==10||(d[p+i]>=32&&d[p+i]<=126)))return false;
+      p+=len;
+    } else if(type==2) {
+      if(p+2>n)return false;
+      p++; // modifiers
+      uint8_t count=d[p++];
+      if(!count||count>6||p+count>n)return false;
+      for(uint8_t i=0;i<count;i++)if(d[p+i]<4||d[p+i]>115)return false;
+      p+=count;
+    } else if(type==3) {
+      if(p+2>n)return false;
+      p+=2;
+    } else if(type==4) {
+      if(p>=n||d[p]<1||d[p]>4)return false;
+      p++;
+    } else if(type==5) {
+      if(p>=n||int8_t(d[p])==0)return false;
+      p++;
+    } else if(type==6) {
+      if(p+2>n)return false;
+      uint16_t code=uint16_t(d[p]|(uint16_t(d[p+1])<<8));
+      if(!validMediaCode(code))return false;
+      p+=2;
+    } else if(type==7) {
+      if(p>=n||d[p]>=Pixel::Profiles)return false;
+      p++;
+    } else if(type==8) {
+      if(p>=n||d[p]<1||d[p]>2)return false;
+      p++;
+    } else return false;
+  }
+  return p==n;
+}
+
+bool readScriptFile(uint8_t p,uint8_t k) {
+  if(!ensureFlash(false))return false;
+  char path[16];
+  snprintf(path,sizeof(path),"/s%u%u.pxs",unsigned(p),unsigned(k));
+  File file=SPIFFS.open(path,FILE_READ);
+  if(!file||file.size()>sizeof(scriptData)||file.size()<6){if(file)file.close();return false;}
+  scriptSize=file.size();
+  bool ok=file.read(scriptData,scriptSize)==scriptSize;
+  file.close();
+  return ok&&validateScriptBytes(scriptData,scriptSize);
+}
+
+void startScript(uint8_t p,uint8_t k) {
+  if(!readScriptFile(p,k)){emit("E|SCRIPTERR|MISSING");return;}
+  scriptPos=5;
+  scriptSteps=scriptData[4];
+  scriptActive=true;
+  scriptResumeAt=0;
+}
+
+void runScript(uint32_t now) {
+  if(!scriptActive||int32_t(now-scriptResumeAt)<0)return;
+  for(int budget=0;budget<6&&scriptActive;budget++) {
+    if(!scriptSteps||scriptPos>=scriptSize){scriptActive=false;reportKeys();return;}
+    uint8_t type=scriptData[scriptPos++];
+    scriptSteps--;
+
+    if(type==1) {
+      uint8_t len=scriptData[scriptPos++];
+      for(uint8_t i=0;i<len;i++)keyboard.write(scriptData[scriptPos++]);
+      reportKeys();
+    } else if(type==2) {
+      uint8_t modifiers=scriptData[scriptPos++];
+      uint8_t count=scriptData[scriptPos++];
+      KeyReport report{};
+      report.modifiers=modifiers;
+      for(uint8_t i=0;i<count;i++)report.keys[i]=scriptData[scriptPos++];
+      keyboard.sendReport(&report);
+      delay(12);
+      KeyReport empty{};
+      keyboard.sendReport(&empty);
+      reportKeys();
+    } else if(type==3) {
+      uint16_t ms=uint16_t(scriptData[scriptPos]|(uint16_t(scriptData[scriptPos+1])<<8));
+      scriptPos+=2;
+      scriptResumeAt=now+ms;
+      return;
+    } else if(type==4) {
+      uint8_t code=scriptData[scriptPos++];
+      uint8_t button=code==1?MOUSE_LEFT:code==2?MOUSE_RIGHT:MOUSE_MIDDLE;
+      mouse.click(button);
+      if(code==4){delay(35);mouse.click(MOUSE_LEFT);}
+    } else if(type==5) {
+      int8_t wheel=int8_t(scriptData[scriptPos++]);
+      mouse.move(0,0,wheel);
+    } else if(type==6) {
+      uint16_t code=uint16_t(scriptData[scriptPos]|(uint16_t(scriptData[scriptPos+1])<<8));
+      scriptPos+=2;
+      consumer(code);
+    } else if(type==7) {
+      selectProfile(scriptData[scriptPos++]);
+    } else if(type==8) {
+      uint8_t ctrl=scriptData[scriptPos++];
+      selectProfile((profile+(ctrl==1?1:Pixel::Profiles-1))%Pixel::Profiles);
+    }
+  }
+}
+
 void stopSaver() {
   if(mediaFile)mediaFile.close();
   if(mediaActive) {
@@ -177,6 +305,7 @@ void activate(const Pixel::Binding& b,int key,bool down) {
     else if(b.code==6)mouse.move(0,0,-1);
   }
   if(b.type=='P')selectProfile(b.code);
+  if(b.type=='S')startScript(profile,key);
   if(b.type=='H')emit("E|HOST|"+String(profile)+"|"+String(key));
 }
 
@@ -508,12 +637,18 @@ void finishUpload() {
   if(upload.icon) {
     uint16_t w=0,h=0;
     valid=readIconHeader(check,w,h);
+  } else if(upload.script) {
+    if(check&&check.size()<=sizeof(scriptData)&&check.size()>=6) {
+      uint16_t size=check.size();
+      valid=check.read(scriptData,size)==size&&validateScriptBytes(scriptData,size);
+    }
   } else valid=readMediaHeader(check);
   if(check)check.close();
   if(!valid){abortUpload("FORMAT");return;}
 
   char target[24];
   if(upload.icon)snprintf(target,sizeof(target),"/i%u%u.pxi",unsigned(upload.iconProfile),unsigned(upload.iconKey));
+  else if(upload.script)snprintf(target,sizeof(target),"/s%u%u.pxs",unsigned(upload.scriptProfile),unsigned(upload.scriptKey));
   else strcpy(target,"/screensaver.pxg");
   SPIFFS.remove(target);
   if(!SPIFFS.rename("/upload.tmp",target)){abortUpload("RENAME");return;}
@@ -566,7 +701,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE");
+    ok("PIXELPRO2|2.3.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -693,8 +828,40 @@ void request(char* line) {
     if(!upload.file){error("FLASH");return;}
     upload.active=true;
     upload.icon=true;
+    upload.script=false;
     upload.iconProfile=p;
     upload.iconKey=k;
+    upload.expected=v;
+    upload.received=0;
+    upload.crcExpected=m;
+    upload.crc=0xFFFFFFFFUL;
+    upload.fill=0;
+    ok("READY|512");
+    return;
+  }
+
+  if(cmd=="SCRIPT"&&n==5&&strcmp(tokens[2],"DELETE")==0&&
+     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)) {
+    if(!ensureFlash(false)){ok("DELETED");return;}
+    char path[16];
+    snprintf(path,sizeof(path),"/s%u%u.pxs",unsigned(p),unsigned(k));
+    SPIFFS.remove(path);
+    ok("DELETED");return;
+  }
+  if(cmd=="SCRIPT"&&n==7&&strcmp(tokens[2],"BEGIN")==0&&
+     Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)&&
+     Pixel::number(tokens[5],2048,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
+    if(!ensureFlash(true)||v<6){error("SCRIPT");return;}
+    stopSaver();
+    if(upload.file)upload.file.close();
+    SPIFFS.remove("/upload.tmp");
+    upload.file=SPIFFS.open("/upload.tmp",FILE_WRITE);
+    if(!upload.file){error("FLASH");return;}
+    upload.active=true;
+    upload.icon=false;
+    upload.script=true;
+    upload.scriptProfile=p;
+    upload.scriptKey=k;
     upload.expected=v;
     upload.received=0;
     upload.crcExpected=m;
@@ -714,6 +881,7 @@ void request(char* line) {
     if(!upload.file){error("FLASH");return;}
     upload.active=true;
     upload.icon=false;
+    upload.script=false;
     upload.expected=v;
     upload.received=0;
     upload.crcExpected=m;
@@ -776,6 +944,7 @@ void setup() {
 void loop() {
   uint32_t now=millis();
   scanKeys(now);
+  runScript(now);
   if(consumerHeld&&int32_t(now-consumerUntil)>=0){media.release();consumerHeld=0;}
 
   if(upload.active) {
