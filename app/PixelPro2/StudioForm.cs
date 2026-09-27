@@ -90,6 +90,7 @@ public sealed class StudioForm : Form {
     readonly System.Windows.Forms.Timer autoProfileTimer=new(){Interval=600};
     readonly NotifyIcon tray=new(){Icon=SystemIcons.Application,Text="PIXEL PRO 2.0"};
     readonly Dictionary<Control,string> languageBase=new();
+    readonly Dictionary<int,Image> iconPreviews=new();
     string languageCode="en";
 
     readonly string localPath=Path.Combine(
@@ -760,6 +761,8 @@ public sealed class StudioForm : Form {
             monitorTimer.Stop();musicTimer.Stop();autoProfileTimer.Stop();
             monitorTimer.Dispose();musicTimer.Dispose();autoProfileTimer.Dispose();
             monitorCollector.Dispose();musicPlugin.Dispose();
+            foreach(var image in iconPreviews.Values)image.Dispose();
+            iconPreviews.Clear();
             shutdown.Cancel();device.Dispose();tray.Dispose();
         };
     }
@@ -992,11 +995,31 @@ public sealed class StudioForm : Form {
         LoadStepEditor();
     }
 
+    int IconPreviewKey(int profile,int key)=>profile*DeviceLimits.Keys+key;
+
+    Image? GetIconPreview(int profile,int key) {
+        int id=IconPreviewKey(profile,key);
+        if(iconPreviews.TryGetValue(id,out var image))return image;
+        image=IconStore.LoadPreview(profile,key);
+        if(image!=null)iconPreviews[id]=image;
+        return image;
+    }
+
+    void ReloadIconPreview(int profile,int key) {
+        int id=IconPreviewKey(profile,key);
+        if(iconPreviews.Remove(id,out var old))old.Dispose();
+        if(profile==currentProfile)RefreshTiles();
+    }
+
     void RefreshTiles() {
         for(int k=0;k<DeviceLimits.Keys;k++) {
             var b=preset.Profiles[currentProfile][k];
             string mode=b.Type=="H"?"APP":b.Type=="D"?"OFF":"HID";
             keyButtons[k].Text=$"K{k+1}\n{b.Label}\n[{mode}]";
+            keyButtons[k].Image=GetIconPreview(currentProfile,k);
+            keyButtons[k].ImageAlign=ContentAlignment.TopCenter;
+            keyButtons[k].TextImageRelation=keyButtons[k].Image==null?TextImageRelation.Overlay:TextImageRelation.ImageAboveText;
+            keyButtons[k].TextAlign=ContentAlignment.BottomCenter;
             keyButtons[k].BackColor=k==currentKey?Color.FromArgb(215,235,255):dark?Color.FromArgb(45,48,54):Color.White;
             keyButtons[k].ForeColor=dark?Color.White:Color.Black;
             keyButtons[k].FlatAppearance.BorderColor=k==currentKey?Color.FromArgb(40,120,210):Color.FromArgb(205,210,220);
@@ -1149,6 +1172,12 @@ public sealed class StudioForm : Form {
             byte[] script=MediaCodec.FromNativeScript(b.Steps);
             await device.UploadScript(p,k,script,progress,shutdown.Token);
         }
+        if(IconStore.DeletePending(p,k)) {
+            await device.Request($"ICON|DELETE|{p}|{k}");
+            IconStore.ClearDelete(p,k);
+        }
+        var icon=IconStore.ReadBinary(p,k);
+        if(icon!=null)await device.UploadIcon(p,k,icon,progress,shutdown.Token);
         await device.Request(b.Wire(p,k));
     }
 
@@ -1318,19 +1347,28 @@ public sealed class StudioForm : Form {
     static Color From565(int c)=>Color.FromArgb(((c>>11)&31)*255/31,((c>>5)&63)*255/63,(c&31)*255/31);
 
     async Task UploadIcon() {
-        NeedDevice();SaveEditor();
+        SaveEditor();
         using var dialog=new OpenFileDialog{Filter="Image|*.png;*.jpg;*.jpeg;*.bmp;*.gif"};
         if(dialog.ShowDialog()!=DialogResult.OK)return;
         transfer.Value=0;
-        byte[] data=await Task.Run(()=>MediaCodec.FromIcon(dialog.FileName));
-        await device.UploadIcon(currentProfile,currentKey,data,new Progress<int>(v=>transfer.Value=Math.Clamp(v,0,100)),shutdown.Token);
-        status.Text=$"Icon saved P{currentProfile+1} K{currentKey+1}";
+        await Task.Run(()=>IconStore.Save(dialog.FileName,currentProfile,currentKey));
+        ReloadIconPreview(currentProfile,currentKey);
+        if(device.Connected) {
+            var data=IconStore.ReadBinary(currentProfile,currentKey)!;
+            await device.UploadIcon(currentProfile,currentKey,data,
+                new Progress<int>(v=>transfer.Value=Math.Clamp(v,0,100)),shutdown.Token);
+            status.Text=$"Icon saved P{currentProfile+1} K{currentKey+1}";
+        } else status.Text=$"Icon selected P{currentProfile+1} K{currentKey+1} · sync later";
     }
 
     async Task DeleteIcon() {
-        NeedDevice();
-        await device.Request($"ICON|DELETE|{currentProfile}|{currentKey}");
-        status.Text=$"Icon deleted P{currentProfile+1} K{currentKey+1}";
+        IconStore.MarkDeleted(currentProfile,currentKey);
+        ReloadIconPreview(currentProfile,currentKey);
+        if(device.Connected) {
+            await device.Request($"ICON|DELETE|{currentProfile}|{currentKey}");
+            IconStore.ClearDelete(currentProfile,currentKey);
+            status.Text=$"Icon deleted P{currentProfile+1} K{currentKey+1}";
+        } else status.Text=$"Icon cleared P{currentProfile+1} K{currentKey+1} · sync later";
     }
 
     async Task UploadGif() {
