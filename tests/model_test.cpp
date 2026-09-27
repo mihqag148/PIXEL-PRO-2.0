@@ -24,6 +24,12 @@ int main() {
   d.since=0xFFFFFFFA;d.candidate=false;assert(d.update(false,8)&&!d.stable);
   Pixel::Binding key{'K',4,1,0,"Copy"};assert(Pixel::valid(key));
   key.code=65535;assert(!Pixel::valid(key));key.type='P';key.code=5;key.modifiers=0;assert(!Pixel::valid(key));
-  key.code=4;assert(Pixel::valid(key));strcpy(key.label,"bad|label");assert(!Pixel::valid(key));
+  key.code=4;assert(Pixel::valid(key));
+  key.type='M';key.code=1;key.modifiers=0;assert(Pixel::valid(key));
+  key.code=7;assert(!Pixel::valid(key));
+  key.type='S';key.code=0;assert(Pixel::valid(key));
+  key.code=1;assert(!Pixel::valid(key));
+  key.type='P';key.code=4;assert(Pixel::valid(key));
+  strcpy(key.label,"bad|label");assert(!Pixel::valid(key));
   std::cout<<"Model tests passed\n";
 }
