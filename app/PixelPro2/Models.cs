@@ -2,12 +2,17 @@ using System.Text.Json;
 
 namespace PixelPro2;
 
+public static class DeviceLimits {
+    public const int Profiles=25;
+    public const int Keys=8;
+}
+
 public static class Protocol {
     public static bool CompatibleHello(string hello) {
         var parts=hello.Split('|');
         return parts.Length>=6 && parts[0]=="PIXELPRO2" &&
             Version.TryParse(parts[1],out var version) && version.Major==2 &&
-            parts[2]=="5" && parts[3]=="8" && parts[4]=="HX8357B";
+            parts[2]==DeviceLimits.Profiles.ToString() && parts[3]==DeviceLimits.Keys.ToString() && parts[4]=="HX8357B";
     }
 }
 
@@ -56,7 +61,7 @@ public sealed class Binding {
             "C" => Modifiers==0 && new[]{233,234,226,205,181,182,183}.Contains(Code),
             "M" => Modifiers==0 && Code is >=1 and <=6,
             "S" => Code==0 && Modifiers==0,
-            "P" => Modifiers==0 && Code is >=0 and <5,
+            "P" => Modifiers==0 && Code is >=0 and <DeviceLimits.Profiles,
             "H" or "D" => Code==0 && Modifiers==0,
             _ => false
         };
@@ -94,8 +99,8 @@ public sealed class Binding {
                         throw new FormatException("Media: VOLUP/VOLDOWN/MUTE/PLAYPAUSE/NEXT/PREV/STOP.");
                     break;
                 case "ChangeProfile":
-                    if(!int.TryParse(s.Value,out int profile)||profile is <1 or >5)
-                        throw new FormatException("ChangeProfile dùng 1..5.");
+                    if(!int.TryParse(s.Value,out int profile)||profile is <1 or >DeviceLimits.Profiles)
+                        throw new FormatException($"ChangeProfile dùng 1..{DeviceLimits.Profiles}.");
                     break;
                 case "FunctionalKey":
                     Shortcut.Parse(s.Value);
@@ -149,7 +154,7 @@ public sealed class AutoProfileRule {
     public bool Enabled { get; set; }=true;
 
     public void Validate() {
-        if(Profile is <0 or >4)throw new FormatException("Auto profile phải nằm trong 1..5.");
+        if(Profile is <0 or >=DeviceLimits.Profiles)throw new FormatException($"Auto profile phải nằm trong 1..{DeviceLimits.Profiles}.");
         if(Process is null||Process.Length>128||Process.IndexOfAny(Path.GetInvalidFileNameChars())>=0)
             throw new FormatException("Tên process auto profile không hợp lệ.");
     }
@@ -204,19 +209,19 @@ public static class HidShortcut {
 }
 
 public sealed class Preset {
-    public int Schema { get; set; }=3;
+    public int Schema { get; set; }=4;
     public List<AutoProfileRule> AutoProfiles { get; set; }=[];
     public bool AutoProfileEnabled { get; set; }=true;
-    public Binding[][] Profiles { get; set; }=Enumerable.Range(0,5)
-        .Select(_=>Enumerable.Range(0,8)
+    public Binding[][] Profiles { get; set; }=Enumerable.Range(0,DeviceLimits.Profiles)
+        .Select(_=>Enumerable.Range(0,DeviceLimits.Keys)
             .Select(k=>new Binding{Code=4+k,Label=$"Key {(char)('A'+k)}"})
             .ToArray()).ToArray();
 
     public void Validate() {
-        if(Schema is not (2 or 3)||Profiles is null||Profiles.Length!=5)
-            throw new FormatException("Cần preset PIXEL PRO 2.0 với 5 profile.");
+        if(Schema!=4||Profiles is null||Profiles.Length!=DeviceLimits.Profiles)
+            throw new FormatException($"Cần preset PIXEL PRO 2.0 với {DeviceLimits.Profiles} profile.");
         foreach(var p in Profiles) {
-            if(p is null||p.Length!=8) throw new FormatException("Mỗi profile cần 8 phím.");
+            if(p is null||p.Length!=DeviceLimits.Keys) throw new FormatException($"Mỗi profile cần {DeviceLimits.Keys} phím.");
             foreach(var b in p) {
                 if(b is null) throw new FormatException("Thiếu binding.");
                 b.Validate();
@@ -231,8 +236,21 @@ public sealed class Preset {
         if(new FileInfo(path).Length>2_000_000) throw new FormatException("Preset quá lớn.");
         var p=JsonSerializer.Deserialize<Preset>(File.ReadAllText(path)) ??
               throw new FormatException("Preset rỗng.");
+
+        // Schema 2/3 had five profiles. Preserve those five and seed the new
+        // profile slots with defaults when upgrading to the 25-profile format.
+        if(p.Schema is 2 or 3 && p.Profiles is {Length:5}) {
+            var migrated=new Preset{
+                AutoProfileEnabled=p.AutoProfileEnabled,
+                AutoProfiles=p.AutoProfiles??[]
+            };
+            for(int profile=0;profile<5;profile++)
+                migrated.Profiles[profile]=p.Profiles[profile];
+            p=migrated;
+        }
+
+        p.Schema=4;
         p.Validate();
-        p.Schema=3;
         return p;
     }
 
