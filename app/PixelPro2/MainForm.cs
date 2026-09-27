@@ -39,7 +39,7 @@ public sealed class MainForm : Form {
     bool loading,busy,monitorEnabled,monitorSending;
 
     public MainForm() {
-        Text="PIXEL PRO 2.0 · Studio 2.1";
+        Text="PIXEL PRO 2.0 · Studio 2.2";
         MinimumSize=new Size(1120,830);
         Size=new Size(1240,900);
         Font=new Font("Segoe UI",10);
