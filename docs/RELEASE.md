@@ -1,56 +1,74 @@
-## 2.4.0 — Touch affine rebuild + 25 profiles + Studio parity
+## 2.5.0 — Plugin architecture + Studio parity
 
-### Touch root-cause fix
-
-v2.3 mapped the resistive axes incorrectly for the real MCUFRIEND shield. The verified hardware mapping from the earlier PIXEL-PRO implementation is:
-
-- rawX sampled from YP / D13
-- rawY sampled from XM / D14
-- screen X = rawY reversed
-- screen Y = rawX
-
-v2.4 ports that geometry back and replaces the old linear calibration with a **4-point affine solve**. Calibration no longer depends on the unreliable pressure test that caused only one corner to register.
-
-Touch filtering now requires 3 coherent press polls, 4 release misses, tighter normal-sample stability, median calibration samples, and supports live raw diagnostics.
-
-Studio adds **Reset Touch** and **Touch Diagnostics**. Calibration requires: hold each target briefly, release fully, then move to the next target.
-
-### 25 profiles
+### Studio workflow
 
 - 25 profiles × 8 keys.
-- migrates old 5-profile NVS config and schema-2/3 PC presets.
-- profile actions and Auto Profile support P1…P25.
-- physical LCD profile strip displays banks of five.
-
-### Studio 2.4
-
-- 25-profile selector.
-- Profile & Key Selection + Device List left; Configuration right.
+- multi-device COM sessions with active-device switching.
 - drag/drop actions and key/profile copy.
 - 512 actions/key.
 - HID Mode / App Mode per key.
 - SAVE KEY / SAVE PROFILE / SAVE TO DEVICE.
-- Import/Export full preset and individual Profile.
-- Auto Profile.
-- **Auto Sync PC ↔ device** via KEYHASH prompt.
-- Getting Started + HID explanation.
-- Power Off Computer.
-- USB Safe Mode behavior by design (no mass-storage interface).
-- PC Monitor, GIF, icons, RGB, auto screen-off retained.
+- full preset + single-profile import/export.
+- Auto Sync PC ↔ device via KEYHASH.
+- Auto Profile by foreground Windows process.
+- App Mode keeps running in the system tray.
+- Light/Dark plus English / Vietnamese / Simplified Chinese.
+- Device List context menu.
+- permanent Safe Mode indicator for HID+CDC-only USB behavior.
 
-### Boot / USB / LCD
+### Scripts and HID
 
-Keeps stable HX8357-B timing and v2.3 fast-storage boot path. Native USB CDC/HID handshake fix is retained.
+- native PXS2 scripts retained.
+- eez-style Script action supports common DELAY / STRING / REPEAT / mouse / media / profile / default timing commands.
+- F1…F24, Print Screen, navigation and numpad HID keys.
+- Mouse Move native script opcode added.
+- timed text/chords supported in native scripts.
+
+### Preset Gallery and key icons
+
+- built-in preset gallery.
+- search/category/filter-duplicates UI.
+- local preset folder in AppData.
+- downloaded preset import.
+- exports default to AppData.
+- key icons can be chosen offline and previewed on K1…K8.
+- normal Save Key/Profile/Device workflow synchronizes pending icons.
+- Media Control automatically generates matching key icons.
+
+### Named Pipe plugins
+
+Studio no longer loads LibreHardwareMonitor directly.
+
+- `PIXEL_PRO_2_PLUGINS` named pipe service.
+- standalone `PixelPro2.PcMonitorPlugin.exe`.
+- standalone `PixelPro2.MusicPlugin.exe`.
+- PC Monitor plugin sends CPU/GPU/RAM/Disk/Network/temp telemetry.
+- Music plugin uses Windows SMTC and sends Now Playing data.
+- Studio forwards plugin data to the active PIXEL PRO.
+- plugin status is visible in the UI and bottom bar.
+- main Studio stays `asInvoker` and does not require admin privileges.
+
+### Touch / firmware
+
+Retains v2.4 affine touch rebuild:
+- verified MCUFRIEND raw-axis geometry.
+- median filtering and four-point affine calibration.
+- Reset Touch + Touch Diagnostics.
+- 25-profile firmware model.
+- MUSIC and MONITOR full-screen modes.
+- stable HX8357-B timing.
+- lazy SPIFFS/SD startup.
 
 ### Flash
 
 Use **PIXEL_PRO_2_merged.bin** at **0x000000** with ESP32-S2 / DIO / 40 MHz / 4 MB.
 
-After flashing, use the matching Studio 2.4 and run:
-1. Connect.
-2. Display & Media → Reset Touch.
-3. Touch Diagnostics ON and verify all four corners produce changing raw values.
-4. Touch Diagnostics OFF.
-5. Calibrate Touch: hold/release TL → TR → BR → BL.
+After flashing:
+1. Open matching Studio 2.5.
+2. Connect PIXEL PRO.
+3. Display & Media → Reset Touch.
+4. Touch Diagnostics ON and verify all corners.
+5. Touch Diagnostics OFF.
+6. Calibrate Touch: TL → TR → BR → BL.
 
-CI release requires model/source tests, real ESP32-S2 compile, merged image verification, app tests, UI smoke and self-contained Windows publish.
+CI requires firmware model/source tests, actual ESP32-S2 compile, merged image verification, app protocol tests, real Studio UI smoke, Studio publish, both standalone plugin publishes and release asset verification.
