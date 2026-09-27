@@ -26,6 +26,11 @@ public sealed class DeviceHub : IDisposable {
 
     public bool IsConnected(string port)=>devices.TryGetValue(port,out var d)&&d.Connected;
 
+    public (string version,string id) Metadata(string port) {
+        if(devices.TryGetValue(port,out var d)&&d.Connected)return(d.FirmwareVersion,d.DeviceId);
+        return("","");
+    }
+
     public async Task Connect(string port) {
         if(devices.TryGetValue(port,out var existing)&&existing.Connected) {
             activePort=port;Changed?.Invoke();return;
