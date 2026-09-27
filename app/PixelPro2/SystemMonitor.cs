@@ -4,10 +4,6 @@ using LibreHardwareMonitor.Hardware;
 
 namespace PixelPro2;
 
-public readonly record struct MonitorSnapshot(
-    int CpuPercent,int GpuPercent,int RamPercent,int DiskPercent,int NetKbps,
-    int CpuTempC,int GpuTempC);
-
 public sealed class SystemMonitorCollector : IDisposable {
     ulong lastIdle,lastKernel,lastUser,lastBytes;
     DateTime lastNet=DateTime.UtcNow;
