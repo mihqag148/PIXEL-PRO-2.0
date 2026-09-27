@@ -1031,13 +1031,13 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MUSIC,MOUSE,SCRIPT");
+    ok("PIXELPRO2|2.5.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MUSIC,MOUSE,SCRIPT");
     return;
   }
   if(cmd=="INFO"&&n==2) {
     char id[12];
     snprintf(id,sizeof(id),"%08lX",uint32_t(ESP.getEfuseMac()));
-    ok("2.4.0|"+String(id));return;
+    ok("2.5.0|"+String(id));return;
   }
   if(cmd=="KEYHASH"&&n==2){ok(String(keymapHash()));return;}
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
