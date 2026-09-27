@@ -44,10 +44,15 @@ public:
   void orientation(uint8_t mode){reg(0x36,{Pixel::displayMadctl(mode)});}
 
   void begin(uint8_t mode) {
-    restore();delay(1000);
+    restore();
+    // Blank the panel immediately. The old one-second delay left random GRAM
+    // visible at power-up, which looked like heavy LCD noise.
+    reg(0x28);delay(10);
     reg(0xB0,{0,0});reg(0x01);delay(150);reg(0x28);
     reg(0x3A,{0x55});delay(1);reg(0x11);delay(150);
-    reg(0x29);delay(50);orientation(mode);reg(0x21);setTextWrap(false);
+    orientation(mode);reg(0x21);
+    fillScreen(0x0000);
+    reg(0x29);delay(50);setTextWrap(false);
   }
 
   void drawPixel(int16_t x,int16_t y,uint16_t c) override{fillRect(x,y,1,1,c);}
