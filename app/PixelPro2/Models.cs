@@ -113,6 +113,9 @@ public sealed class Binding {
                     if(!string.IsNullOrWhiteSpace(s.Value))
                         throw new FormatException("PowerOff không cần tham số.");
                     break;
+                case "Script":
+                    EezScript.Expand(s.Value,true);
+                    break;
                 case "Delay":
                     if(!int.TryParse(s.Value,out int ms)||ms<0||ms>30000)
                         throw new FormatException("Delay từ 0 đến 30000 ms.");
@@ -328,6 +331,128 @@ public sealed class ProfilePreset {
     }
 }
 
+public static class EezScript {
+    static string NormalizeKey(string token)=>token.ToUpperInvariant() switch {
+        "CONTROL"=>"CTRL","WINDOWS"=>"WIN","COMMAND"=>"WIN","OPTION"=>"ALT",
+        "PP"=>"PLAYPAUSE",_=>token.ToUpperInvariant()
+    };
+
+    static Step DelayStep(int ms)=>new(){Type="Delay",Value=ms.ToString()};
+
+    public static List<Step> Expand(string script,bool nativeTiming) {
+        if(script is null||script.Length>32768)throw new FormatException("Script tối đa 32 KB.");
+        int duration=10,charDelay=18,lineDelay=18;
+        var output=new List<Step>();
+        List<Step>? previous=null;
+
+        void AppendCommand(IEnumerable<Step> command,bool addLineDelay=true) {
+            var materialized=command.Select(x=>new Step{Type=x.Type,Value=x.Value}).ToList();
+            output.AddRange(materialized);
+            previous=materialized;
+            if(addLineDelay&&lineDelay>0)output.Add(DelayStep(lineDelay));
+            if(output.Count>512)throw new FormatException("Script sau khi biên dịch vượt 512 action.");
+        }
+
+        var lines=script.Replace("\r","").Split('\n');
+        for(int lineNo=0;lineNo<lines.Length;lineNo++) {
+            string raw=lines[lineNo].Trim();
+            if(raw.Length==0||raw.StartsWith('#')||raw.StartsWith("//")||
+               raw.StartsWith("REM ",StringComparison.OrdinalIgnoreCase)||raw.Equals("REM",StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            int space=raw.IndexOf(' ');
+            string command=(space<0?raw:raw[..space]).Trim().ToUpperInvariant();
+            string arg=space<0?"":raw[(space+1)..].Trim();
+
+            try {
+                switch(command) {
+                    case "DEFAULTDURATION":
+                        if(!int.TryParse(arg,out duration)||duration is <0 or >30000)
+                            throw new FormatException("DEFAULTDURATION dùng 0..30000 ms.");
+                        previous=null;continue;
+                    case "DEFAULTCHARDELAY":
+                        if(!int.TryParse(arg,out charDelay)||charDelay is <0 or >30000)
+                            throw new FormatException("DEFAULTCHARDELAY dùng 0..30000 ms.");
+                        previous=null;continue;
+                    case "DEFAULTDELAY":
+                        if(!int.TryParse(arg,out lineDelay)||lineDelay is <0 or >30000)
+                            throw new FormatException("DEFAULTDELAY dùng 0..30000 ms.");
+                        previous=null;continue;
+                    case "REPEAT": {
+                        if(previous is null||!int.TryParse(arg,out int repeat)||repeat is <1 or >255)
+                            throw new FormatException("REPEAT cần dòng trước và số lần 1..255.");
+                        var copy=previous.Select(x=>new Step{Type=x.Type,Value=x.Value}).ToList();
+                        for(int i=0;i<repeat;i++) {
+                            output.AddRange(copy.Select(x=>new Step{Type=x.Type,Value=x.Value}));
+                            if(lineDelay>0)output.Add(DelayStep(lineDelay));
+                            if(output.Count>512)throw new FormatException("REPEAT làm script vượt 512 action.");
+                        }
+                        continue;
+                    }
+                    case "DELAY":
+                        if(!int.TryParse(arg,out int ms)||ms is <0 or >30000)
+                            throw new FormatException("DELAY dùng 0..30000 ms.");
+                        AppendCommand([DelayStep(ms)],false);continue;
+                    case "STRING":
+                        if(arg.Length==0||arg.Length>255||arg.Any(ch=>ch>127))
+                            throw new FormatException("STRING hỗ trợ 1..255 ký tự ASCII.");
+                        if(nativeTiming)AppendCommand([new Step{Type="NativeTextTimed",Value=$"{charDelay}|{arg}"}]);
+                        else {
+                            var chars=new List<Step>();
+                            foreach(char ch in arg) {
+                                chars.Add(new Step{Type="Text",Value=ch.ToString()});
+                                if(charDelay>0)chars.Add(DelayStep(charDelay));
+                            }
+                            AppendCommand(chars);
+                        }
+                        continue;
+                    case "MOUSE_MOVE": {
+                        var p=arg.Split(' ',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
+                        if(p.Length!=2||!int.TryParse(p[0],out int x)||!int.TryParse(p[1],out int y)||
+                           x is <-127 or >127||y is <-127 or >127)
+                            throw new FormatException("MOUSE_MOVE X Y, mỗi trục -127..127.");
+                        AppendCommand([new Step{Type=nativeTiming?"NativeMouseMove":"MouseMove",Value=$"{x},{y}"}]);
+                        continue;
+                    }
+                    case "LMOUSE":AppendCommand([new Step{Type="MouseClick",Value="LEFT"}]);continue;
+                    case "MMOUSE":AppendCommand([new Step{Type="MouseClick",Value="MIDDLE"}]);continue;
+                    case "RMOUSE":AppendCommand([new Step{Type="MouseClick",Value="RIGHT"}]);continue;
+                    case "GOTO_PROFILE":
+                        if(!int.TryParse(arg,out int profile)||profile is <1 or >DeviceLimits.Profiles)
+                            throw new FormatException($"GOTO_PROFILE dùng 1..{DeviceLimits.Profiles}.");
+                        AppendCommand([new Step{Type="ChangeProfile",Value=profile.ToString()}]);continue;
+                    case "PREV_PROFILE":AppendCommand([new Step{Type="DeviceCtrl",Value="PROFILE_PREV"}]);continue;
+                    case "NEXT_PROFILE":AppendCommand([new Step{Type="DeviceCtrl",Value="PROFILE_NEXT"}]);continue;
+                    case "VOLUP":
+                    case "VOLDOWN":
+                    case "MUTE":
+                    case "PREV":
+                    case "NEXT":
+                    case "PP":
+                    case "PLAYPAUSE":
+                    case "STOP":
+                        AppendCommand([new Step{Type="Media",Value=command=="PP"?"PLAYPAUSE":command}]);continue;
+                }
+
+                var keys=raw.Split(' ',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries)
+                    .Select(NormalizeKey).ToArray();
+                string shortcut=string.Join('+',keys);
+                if(!HidShortcut.TryParse(shortcut,out _,out _))
+                    throw new FormatException($"Không hỗ trợ lệnh/phím: {raw}");
+                AppendCommand([new Step{
+                    Type=nativeTiming?"NativeChordTimed":"Shortcut",
+                    Value=nativeTiming?$"{duration}|{shortcut}":shortcut
+                }]);
+            } catch(FormatException ex) {
+                throw new FormatException($"Script dòng {lineNo+1}: {ex.Message}",ex);
+            }
+        }
+
+        if(output.Count==0)throw new FormatException("Script không có lệnh thực thi.");
+        return output;
+    }
+}
+
 public static class Shortcut {
     public static ushort[] Parse(string text) {
         var parts=text.ToUpperInvariant().Split('+',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
@@ -335,11 +460,18 @@ public static class Shortcut {
         var result=new List<ushort>();
         foreach(var p in parts) {
             ushort code=p switch {
-                "CTRL"=>0x11,"ALT"=>0x12,"SHIFT"=>0x10,"WIN"=>0x5B,
+                "CTRL" or "CONTROL"=>0x11,"ALT" or "OPTION"=>0x12,"SHIFT"=>0x10,
+                "WIN" or "WINDOWS" or "COMMAND"=>0x5B,
                 "ENTER"=>0x0D,"ESC"=>0x1B,"SPACE"=>0x20,"TAB"=>9,
                 "LEFT"=>0x25,"UP"=>0x26,"RIGHT"=>0x27,"DOWN"=>0x28,
                 "DELETE"=>0x2E,"BACKSPACE"=>8,"HOME"=>0x24,"END"=>0x23,
                 "PAGEUP"=>0x21,"PAGEDOWN"=>0x22,"INSERT"=>0x2D,
+                "CAPSLOCK" or "CAPLOCKS"=>0x14,"PRINTSCREEN"=>0x2C,"SCROLLLOCK"=>0x91,
+                "PAUSE" or "BREAK"=>0x13,"MENU"=>0x5D,
+                "NUMLOCK"=>0x90,"KP_SLASH"=>0x6F,"KP_ASTERISK"=>0x6A,"KP_MINUS"=>0x6D,
+                "KP_PLUS"=>0x6B,"KP_ENTER"=>0x0D,"KP_DOT"=>0x6E,"KP_EQUAL"=>0xBB,
+                "KP_0"=>0x60,"KP_1"=>0x61,"KP_2"=>0x62,"KP_3"=>0x63,"KP_4"=>0x64,
+                "KP_5"=>0x65,"KP_6"=>0x66,"KP_7"=>0x67,"KP_8"=>0x68,"KP_9"=>0x69,
                 _ when p.Length==1&&char.IsAsciiLetterOrDigit(p[0])=>(ushort)p[0],
                 _ when p.StartsWith('F')&&int.TryParse(p[1..],out int f)&&f is >=1 and <=24=>(ushort)(0x6F+f),
                 _=>throw new FormatException($"Phím shortcut không hỗ trợ: {p}")
