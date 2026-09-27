@@ -515,7 +515,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.1.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
+    ok("PIXELPRO2|2.2.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
