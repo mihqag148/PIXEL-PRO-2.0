@@ -33,7 +33,8 @@ public sealed class StudioForm : Form {
         new("Change Profile","ChangeProfile","1",$"HID capable. Profile 1..{DeviceLimits.Profiles}.",true),
         new("Functional Key","FunctionalKey","F1","HID capable. Example: HOME, PAGEUP, F1.",true),
         new("Device Control","DeviceCtrl","PROFILE_NEXT","HID: PROFILE_NEXT/PROFILE_PREV. MONITOR_TOGGLE needs Studio.",true),
-        new("Power Off Computer","PowerOff","","Windows host action. Requires Studio.",false)
+        new("Power Off Computer","PowerOff","","Windows host action. Requires Studio.",false),
+        new("Script","Script","CONTROL c\nDELAY 100\nSTRING hello","Eez-compatible script language. Click Browse… to edit multiline script.",true)
     ];
 
     readonly DeviceHub device=new();
@@ -479,7 +480,7 @@ public sealed class StudioForm : Form {
         "Website"=>"🌐","LaunchApp"=>"▶","OpenFolder"=>"📁","OpenFile"=>"📄",
         "Text"=>"T","Shortcut"=>"⌨","Delay"=>"⏱","MouseMove"=>"↔",
         "MouseClick"=>"🖱","Wheel"=>"↕","Media"=>"⏯","ChangeProfile"=>"▣",
-        "FunctionalKey"=>"Fn","DeviceCtrl"=>"⚙","PowerOff"=>"⏻",_=>"＋"
+        "FunctionalKey"=>"Fn","DeviceCtrl"=>"⚙","PowerOff"=>"⏻","Script"=>"</>",_=>"＋"
     };
 
     Control BuildPlugins() {
@@ -838,6 +839,27 @@ public sealed class StudioForm : Form {
             if(dialog.ShowDialog()==DialogResult.OK)stepValue.Text=dialog.SelectedPath;
         } else if(item.Step.Type=="Website") {
             stepValue.Focus();stepValue.SelectAll();
+        } else if(item.Step.Type=="Script") {
+            using var editor=new Form{
+                Text="Script Editor",Width=760,Height=580,StartPosition=FormStartPosition.CenterParent,
+                MinimizeBox=false
+            };
+            var text=new TextBox{
+                Multiline=true,AcceptsReturn=true,AcceptsTab=true,ScrollBars=ScrollBars.Both,
+                WordWrap=false,Dock=DockStyle.Fill,Font=new Font("Consolas",10),Text=item.Step.Value
+            };
+            var help=new Label{
+                Dock=DockStyle.Top,Height=72,Padding=new Padding(8),
+                Text="DELAY / STRING / REPEAT / MOUSE_MOVE / LMOUSE / MMOUSE / RMOUSE / GOTO_PROFILE / PREV_PROFILE / NEXT_PROFILE / DEFAULTDURATION / DEFAULTCHARDELAY / DEFAULTDELAY / media / key combinations / F1-F24 / numpad"
+            };
+            var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft};
+            var save=new Button{Text="Save Script",DialogResult=DialogResult.OK,Width=110,Height=30};
+            var guide=new Button{Text="Script Usage Guide",Width=130,Height=30};
+            guide.Click+=(_,_)=>Process.Start(new ProcessStartInfo("https://www.eezbotfun.com/en/wiki/script-usage-guide"){UseShellExecute=true});
+            buttons.Controls.Add(save);buttons.Controls.Add(guide);
+            editor.Controls.Add(text);editor.Controls.Add(help);editor.Controls.Add(buttons);
+            editor.AcceptButton=save;
+            if(editor.ShowDialog(this)==DialogResult.OK)stepValue.Text=text.Text;
         }
         return Task.CompletedTask;
     }
