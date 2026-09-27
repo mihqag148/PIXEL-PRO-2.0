@@ -78,6 +78,12 @@ public sealed class StudioForm : Form {
     readonly string localPath=Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PixelPro2","preset-v4.json");
+    readonly string legacyLocalPathV3=Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PixelPro2","preset-v3.json");
+    readonly string legacyLocalPathV2=Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PixelPro2","preset.json");
 
     public StudioForm() {
         Text="PIXEL PRO 2.0 · Studio 2.4";
@@ -119,9 +125,14 @@ public sealed class StudioForm : Form {
 
         WireEvents();
 
-        if(File.Exists(localPath)) {
-            try{preset=Preset.Load(localPath);}
-            catch(Exception ex){Log("Local preset: "+ex.Message);}
+        string? draftPath=File.Exists(localPath)?localPath:
+            File.Exists(legacyLocalPathV3)?legacyLocalPathV3:
+            File.Exists(legacyLocalPathV2)?legacyLocalPathV2:null;
+        if(draftPath!=null) {
+            try {
+                preset=Preset.Load(draftPath);
+                if(!string.Equals(draftPath,localPath,StringComparison.OrdinalIgnoreCase))SaveLocal();
+            } catch(Exception ex){Log("Local preset: "+ex.Message);}
         }
 
         autoProfileEnabled.Checked=preset.AutoProfileEnabled;
@@ -274,6 +285,10 @@ public sealed class StudioForm : Form {
     Control BuildRightPane() {
         var tabs=new TabControl{Dock=DockStyle.Fill};
 
+        var startTab=new TabPage("Getting Started"){Padding=new Padding(12)};
+        startTab.Controls.Add(BuildGettingStarted());
+        tabs.TabPages.Add(startTab);
+
         var keyTab=new TabPage("Key Configuration"){Padding=new Padding(8)};
         keyTab.Controls.Add(BuildKeyEditor());
         tabs.TabPages.Add(keyTab);
@@ -291,6 +306,41 @@ public sealed class StudioForm : Form {
         tabs.TabPages.Add(logTab);
 
         return tabs;
+    }
+
+    Control BuildGettingStarted() {
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,Padding=new Padding(12)};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,70));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+
+        root.Controls.Add(new Label{
+            Text="PIXEL PRO 2.0 · Quick Start",
+            AutoSize=true,Font=new Font("Segoe UI",18,FontStyle.Bold),
+            Padding=new Padding(4,8,4,4)
+        },0,0);
+
+        var guide=new Label{
+            Dock=DockStyle.Fill,AutoSize=false,
+            Font=new Font("Segoe UI",11),
+            Text=
+                "1. Connect PIXEL PRO from Device List.\n\n"+
+                "2. Choose one of 25 profiles and K1…K8.\n\n"+
+                "3. Drag Actions into Action Sequence and edit the selected action parameters.\n\n"+
+                "4. HID Mode runs directly on the device without Studio. Website / Launch App / Open Folder / Open File / Mouse Move / Power Off require App Mode and Studio running.\n\n"+
+                "5. SAVE KEY saves one key, SAVE PROFILE saves eight keys, SAVE TO DEVICE synchronizes all 25 profiles.\n\n"+
+                "6. Drag a key onto another key or a profile onto another profile to copy it.\n\n"+
+                "7. Auto Profile can switch layouts from the foreground Windows application.\n\n"+
+                "USB Safe Mode: ON by design — PIXEL PRO does not expose a mass-storage drive. Native HID/CDC remains available."
+        };
+        root.Controls.Add(guide,0,1);
+
+        var row=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
+        row.Controls.Add(MakeButton("Auto Find Device",AutoConnect));
+        row.Controls.Add(MakeButton("Read Device",ReadDevice));
+        row.Controls.Add(MakeButton("Sync To Device",UploadAll));
+        root.Controls.Add(row,0,2);
+        return root;
     }
 
     Control BuildKeyEditor() {
@@ -806,6 +856,33 @@ public sealed class StudioForm : Form {
         await RefreshMediaInfo();
         status.Text=$"Connected {device.PortName} · PIXEL PRO 2.0";
         Log($"Handshake OK on {device.PortName}");
+        await CheckAutoSync();
+    }
+
+    async Task CheckAutoSync() {
+        try {
+            string remoteText=await device.Request("KEYHASH");
+            if(!uint.TryParse(remoteText,out uint remote))return;
+            uint local=preset.BindingHash();
+            if(remote==local) {
+                status.Text=$"Connected {device.PortName} · configuration synchronized";
+                return;
+            }
+
+            var choice=MessageBox.Show(this,
+                "Cấu hình trên PIXEL PRO khác với bản đang lưu trên PC.\n\n"+
+                "YES  = dùng cấu hình PC và ghi xuống thiết bị\n"+
+                "NO   = đọc cấu hình từ thiết bị về PC\n"+
+                "CANCEL = giữ nguyên, xử lý sau",
+                "PIXEL PRO · Auto Sync",
+                MessageBoxButtons.YesNoCancel,MessageBoxIcon.Question);
+
+            if(choice==DialogResult.Yes)await UploadAll();
+            else if(choice==DialogResult.No)await ReadDevice();
+            else status.Text="Connected · configuration differs (sync postponed)";
+        } catch(Exception ex) {
+            Log("AUTO SYNC: "+ex.Message);
+        }
     }
 
     async Task ReadDevice() {
