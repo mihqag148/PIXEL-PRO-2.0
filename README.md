@@ -2,9 +2,11 @@
 
 Firmware ESP32-S2 + Studio Windows cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B 480×320**. Repo này là nhánh độc lập; mọi build/release của dự án này chỉ thuộc **PIXEL-PRO-2.0**.
 
-## 2.2.0 — eezbotfun-style workflow + full-screen PC monitor
+## 2.2.1 — USB handshake + calibrated HX8357-B startup
 
-- Sửa kết nối COM native USB CDC: Studio assert DTR+RTS đúng yêu cầu của Arduino-ESP32, firmware tắt reboot theo line-state và Studio tự dò/retry cổng.
+- Sửa handshake COM native USB CDC: Studio assert **DTR trước rồi RTS**, firmware tắt reboot theo line-state và không còn chặn reply bằng wrapper `USBCDC::operator bool()`.
+- Hiệu chỉnh gốc landscape cho panel thực tế sang MADCTL `0x68`; orientation cũ được migrate sang key mới và mặc định trở về **Hướng gốc**.
+- LCD được `Display OFF` ngay khi init, set orientation + clear đen trước `Display ON`, giảm nhiễu/GRAM rác lúc bật máy.
 - 8 phím × 5 profile, HID keyboard/media chạy độc lập không cần Studio; host action chạy khi Studio ở nền.
 - Macro host: text Unicode, shortcut, mở app/file/URL, delay, mouse move/click/wheel, KeyDown/KeyUp.
 - Touch calibration 4 điểm lưu NVS; hướng/lật màn hình và touch dùng chung transform.
