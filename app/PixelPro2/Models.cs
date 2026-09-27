@@ -109,6 +109,10 @@ public sealed class Binding {
                     if(s.Value.Trim().ToUpperInvariant() is not ("MONITOR_TOGGLE" or "PROFILE_NEXT" or "PROFILE_PREV"))
                         throw new FormatException("DeviceCtrl không hợp lệ.");
                     break;
+                case "PowerOff":
+                    if(!string.IsNullOrWhiteSpace(s.Value))
+                        throw new FormatException("PowerOff không cần tham số.");
+                    break;
                 case "Delay":
                     if(!int.TryParse(s.Value,out int ms)||ms<0||ms>30000)
                         throw new FormatException("Delay từ 0 đến 30000 ms.");
@@ -252,6 +256,36 @@ public sealed class Preset {
         p.Schema=4;
         p.Validate();
         return p;
+    }
+
+    public void Save(string path) {
+        Validate();
+        var temp=path+".tmp";
+        File.WriteAllText(temp,JsonSerializer.Serialize(this,new JsonSerializerOptions{WriteIndented=true}));
+        File.Move(temp,path,true);
+    }
+}
+
+public sealed class ProfilePreset {
+    public int Schema { get; set; }=1;
+    public Binding[] Keys { get; set; }=Enumerable.Range(0,DeviceLimits.Keys)
+        .Select(k=>new Binding{Code=4+k,Label=$"Key {(char)('A'+k)}"}).ToArray();
+
+    public void Validate() {
+        if(Schema!=1||Keys is null||Keys.Length!=DeviceLimits.Keys)
+            throw new FormatException($"Profile preset cần đúng {DeviceLimits.Keys} phím.");
+        foreach(var binding in Keys) {
+            if(binding is null)throw new FormatException("Profile preset thiếu binding.");
+            binding.Validate();
+        }
+    }
+
+    public static ProfilePreset Load(string path) {
+        if(new FileInfo(path).Length>1_000_000)throw new FormatException("Profile preset quá lớn.");
+        var document=JsonSerializer.Deserialize<ProfilePreset>(File.ReadAllText(path)) ??
+            throw new FormatException("Profile preset rỗng.");
+        document.Validate();
+        return document;
     }
 
     public void Save(string path) {
