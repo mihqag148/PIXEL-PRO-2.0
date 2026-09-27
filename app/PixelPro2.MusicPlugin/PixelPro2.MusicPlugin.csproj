@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PixelPro2.MusicPlugin</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../PixelPro2/MusicPlugin.cs" Link="MusicPlugin.cs" />
+    <Compile Include="../PixelPro2/PluginProtocol.cs" Link="PluginProtocol.cs" />
+  </ItemGroup>
+</Project>
