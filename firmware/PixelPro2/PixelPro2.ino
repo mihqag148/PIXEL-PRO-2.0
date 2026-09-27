@@ -457,7 +457,8 @@ static bool readTouchRaw(uint16_t& rawX,uint16_t& rawY,uint16_t& quality) {
   uint16_t spreadY=max(y1,max(y2,y3))-min(y1,min(y2,y3));
 
   bool inside=rawX>=18&&rawX<=1005&&rawY>=18&&rawY<=1005;
-  bool stable=spreadX<=180&&spreadY<=180;
+  uint16_t stabilityLimit=calibrating?180:100;
+  bool stable=spreadX<=stabilityLimit&&spreadY<=stabilityLimit;
   quality=uint16_t(constrain(1023-int(spreadX+spreadY)*2,0,1023));
   return inside&&stable;
 }
@@ -575,10 +576,10 @@ static void beginCalibration() {
 }
 
 void scanTouch(uint32_t now) {
-  constexpr uint32_t pollMs=10;
-  constexpr uint8_t confirmCount=2;
-  constexpr uint8_t releaseMissCount=3;
-  constexpr uint16_t confirmMove=90;
+  constexpr uint32_t pollMs=20;
+  constexpr uint8_t confirmCount=3;
+  constexpr uint8_t releaseMissCount=4;
+  constexpr uint16_t confirmMove=70;
 
   if(uint32_t(now-lastTouch)<pollMs)return;
   lastTouch=now;
