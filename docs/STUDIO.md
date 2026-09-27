@@ -1,6 +1,6 @@
-# Studio Windows 2.1
+# Studio Windows 2.2
 
-Studio 2.1 is the desktop configurator/background host for PIXEL PRO 2.0.
+Studio 2.2 is the desktop configurator/background host for PIXEL PRO 2.0.
 
 ## Kết nối
 
@@ -8,6 +8,12 @@ Studio 2.1 is the desktop configurator/background host for PIXEL PRO 2.0.
 - Firmware tắt native-USBCDC reboot-by-line-state để việc mở/đóng Studio không đá ESP32-S2 vào bootloader.
 - Có thể chọn COM thủ công bằng **Kết nối**.
 - Mất COM sẽ tắt quyền chạy macro host và ghi lỗi vào log.
+
+## PC Monitor fullscreen
+
+**PC Monitor** chuyển LCD sang trang giám sát toàn màn hình và cập nhật mỗi giây qua CDC. Studio dùng LibreHardwareMonitor 0.9.6 để đọc CPU/GPU load + nhiệt độ khi sensor có sẵn; RAM, disk và network có fallback bằng Windows/.NET API. Phím HID, media key và host macro vẫn hoạt động trong lúc trang monitor hiển thị.
+
+Nhấn **PC Monitor** lần nữa để gửi `MONITOR|OFF` và quay lại giao diện phím. Mất COM sẽ tự tắt monitor ở Studio. Sensor không đọc được sẽ hiện 0% hoặc `--C` thay vì làm app lỗi.
 
 ## Keymap / profile
 
