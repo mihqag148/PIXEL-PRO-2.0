@@ -97,6 +97,10 @@ uint8_t monitorCpu=0,monitorGpu=0,monitorRam=0,monitorDisk=0;
 uint8_t monitorCpuTemp=0,monitorGpuTemp=0;
 uint16_t monitorNet=0;
 
+// Integrated SMTC music plugin
+bool musicActive=false,musicPlaying=false;
+char musicTitle[49]{},musicArtist[49]{};
+
 void defaults() {
   memset(&config,0,sizeof(config));
   config.magic=0x50583201;
@@ -764,8 +768,41 @@ void drawMonitorScreen() {
   panel.print("Keys/HID remain active  |  PC Monitor from Studio");
 }
 
+void drawMusicScreen() {
+  panel.fillScreen(0x0843);
+  panel.setTextColor(0xFFFF);
+  panel.setTextSize(1);
+  panel.setCursor(20,18);
+  panel.print("NOW PLAYING");
+  panel.setCursor(400,18);
+  panel.print(musicPlaying?"PLAY":"PAUSE");
+
+  panel.setTextSize(3);
+  panel.setCursor(20,78);
+  char titleLine[25]{};
+  strncpy(titleLine,musicTitle,24);
+  panel.print(titleLine[0]?titleLine:"No active media");
+
+  panel.setTextSize(2);
+  panel.setTextColor(0xBDF7);
+  panel.setCursor(20,138);
+  char artistLine[37]{};
+  strncpy(artistLine,musicArtist,36);
+  panel.print(artistLine[0]?artistLine:"--");
+
+  panel.setTextColor(0xFFFF);
+  panel.setTextSize(1);
+  panel.drawRect(20,210,440,54,0x7BEF);
+  panel.setCursor(34,230);
+  panel.print("SMTC Music Plugin  |  HID keys remain active");
+}
+
 void render() {
   if(!panelAwake||mediaActive||calibrating||monitorActive)return;
+  if(musicActive) {
+    if(displayDirty){drawMusicScreen();displayDirty=false;}
+    return;
+  }
   if(displayDirty) {
     panel.fillScreen(0x0843);
     panel.setTextSize(2);
@@ -939,7 +976,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0,a=0,b=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
+    ok("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MUSIC,MOUSE,SCRIPT");
     return;
   }
   if(cmd=="KEYHASH"&&n==2){ok(String(keymapHash()));return;}
@@ -967,6 +1004,27 @@ void request(char* line) {
     saverSeconds=v;
     ok("SAVER");return;
   }
+  if(cmd=="MUSIC"&&n==6&&strcmp(tokens[2],"SET")==0&&
+     Pixel::number(tokens[3],1,v)&&Pixel::text(tokens[4],48)&&Pixel::text(tokens[5],48)) {
+    if(calibrating||upload.active){error("BUSY");return;}
+    stopSaver();
+    monitorActive=false;
+    musicActive=true;
+    musicPlaying=v!=0;
+    strncpy(musicTitle,tokens[4],sizeof(musicTitle)-1);
+    strncpy(musicArtist,tokens[5],sizeof(musicArtist)-1);
+    musicTitle[sizeof(musicTitle)-1]=0;
+    musicArtist[sizeof(musicArtist)-1]=0;
+    displayDirty=true;
+    userActivity();
+    ok("MUSIC");return;
+  }
+  if(cmd=="MUSIC"&&n==3&&strcmp(tokens[2],"OFF")==0) {
+    musicActive=false;
+    displayDirty=true;dirtyTiles=255;
+    ok("OFF");return;
+  }
+
   if(cmd=="MONITOR"&&n==3&&strcmp(tokens[2],"OFF")==0) {
     monitorActive=false;
     displayDirty=true;
@@ -981,6 +1039,7 @@ void request(char* line) {
      Pixel::number(tokens[9],125,b)) {
     if(calibrating||upload.active){error("BUSY");return;}
     stopSaver();
+    musicActive=false;
     monitorCpu=p;monitorGpu=k;monitorRam=v;monitorDisk=m;monitorNet=color;
     monitorCpuTemp=a;monitorGpuTemp=b;
     monitorActive=true;
