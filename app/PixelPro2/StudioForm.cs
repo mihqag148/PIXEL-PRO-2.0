@@ -583,7 +583,7 @@ public sealed class StudioForm : Form {
 
     void CopyProfile(int source,int target) {
         if(source==target)return;
-        for(int k=0;k<8;k++)preset.Profiles[target][k]=CloneBinding(preset.Profiles[source][k]);
+        for(int k=0;k<DeviceLimits.Keys;k++)preset.Profiles[target][k]=CloneBinding(preset.Profiles[source][k]);
         if(target==currentProfile)LoadEditor(); else RefreshTiles();
         SaveLocalQuiet();
         status.Text=$"Copied Profile {source+1} → Profile {target+1}";
@@ -663,7 +663,7 @@ public sealed class StudioForm : Form {
         }
         b.Validate();
         preset.Profiles[currentProfile][currentKey]=b;
-        preset.Schema=3;
+        preset.Schema=4;
         RefreshTiles();
     }
 
@@ -858,7 +858,7 @@ public sealed class StudioForm : Form {
     async Task UploadCurrentProfile() {
         NeedDevice();SaveEditor();SaveRulesGrid();preset.Validate();SaveLocal();
         transfer.Value=0;
-        for(int k=0;k<8;k++) {
+        for(int k=0;k<DeviceLimits.Keys;k++) {
             int key=k;
             await UploadBinding(currentProfile,k,new Progress<int>(v=>
                 transfer.Value=Math.Clamp((key*100+v)/DeviceLimits.Keys,0,100)));
@@ -876,7 +876,7 @@ public sealed class StudioForm : Form {
         for(int p=0;p<DeviceLimits.Profiles;p++)for(int k=0;k<DeviceLimits.Keys;k++)if(preset.Profiles[p][k].Type=="S")scriptCount++;
         int scriptDone=0;
 
-        for(int p=0;p<5;p++)for(int k=0;k<8;k++) {
+        for(int p=0;p<DeviceLimits.Profiles;p++)for(int k=0;k<DeviceLimits.Keys;k++) {
             var b=preset.Profiles[p][k];
             if(b.Type=="S") {
                 byte[] script=MediaCodec.FromNativeScript(b.Steps);
