@@ -72,7 +72,8 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('>=DeviceLimits.Profiles',device)
         self.assertIn('Dictionary<string,Device>',hub)
         self.assertIn('public static class EezScript',models)
-        self.assertIn('F24',models)
+        self.assertIn("fn is >=1 and <=24",models)
+        self.assertIn('>=104 and <=115 => $"F{usage-91}"',models)
 
     def test_native_hid_script_engine_present(self):
         firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
