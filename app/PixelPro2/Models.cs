@@ -258,6 +258,22 @@ public sealed class Preset {
         return p;
     }
 
+    public uint BindingHash() {
+        uint hash=2166136261;
+        static uint Add(uint h,byte value)=>(h^value)*16777619;
+        foreach(var page in Profiles)foreach(var binding in page) {
+            hash=Add(hash,(byte)binding.Type[0]);
+            hash=Add(hash,(byte)binding.Code);
+            hash=Add(hash,(byte)(binding.Code>>8));
+            hash=Add(hash,(byte)binding.Modifiers);
+            hash=Add(hash,(byte)binding.Color);
+            hash=Add(hash,(byte)(binding.Color>>8));
+            var label=System.Text.Encoding.ASCII.GetBytes(binding.Label??"");
+            for(int i=0;i<13;i++)hash=Add(hash,i<label.Length?label[i]:(byte)0);
+        }
+        return hash;
+    }
+
     public void Save(string path) {
         Validate();
         var temp=path+".tmp";
