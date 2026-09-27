@@ -18,8 +18,26 @@ class SourceGuardTests(unittest.TestCase):
         panel=(ROOT/'firmware/PixelPro2/Panel.h').read_text()
         self.assertIn('getUChar("orient2",0)',firmware)
         self.assertIn('return 0x68 ^',display)
-        self.assertLess(panel.index('reg(0x28);delay(10);'),panel.index('reg(0x01);delay(150)'))
-        self.assertLess(panel.index('fillScreen(0x0000);'),panel.index('reg(0x29);delay(50)'))
+        self.assertLess(panel.index('reg(0x28);delay(5);'),panel.index('reg(0x01);delay(15)'))
+        self.assertLess(panel.index('fillScreen(0x0000);'),panel.index('reg(0x29);delay(15)'))
+
+    def test_touch_and_fast_boot_guards(self):
+        firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
+        self.assertIn('pressure>=45',firmware)
+        self.assertIn('map(rx,touchCal.left,touchCal.right,24,455)',firmware)
+        self.assertIn('map(ry,touchCal.top,touchCal.bottom,24,295)',firmware)
+        self.assertIn('uint32_t(now-lastTouch)<8',firmware)
+        self.assertIn('flashReady=SPIFFS.begin(false);',firmware)
+        self.assertNotIn('flashReady=SPIFFS.begin(true);',firmware)
+        self.assertIn('sdAttempted=false',firmware)
+
+    def test_native_hid_script_engine_present(self):
+        firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
+        model=(ROOT/'firmware/PixelPro2/Model.h').read_text()
+        self.assertIn("case 'S':",model)
+        self.assertIn('validateScriptBytes',firmware)
+        self.assertIn('SCRIPT"&&n==7',firmware)
+        self.assertIn('runScript(now);',firmware)
 
 if __name__=='__main__':
     unittest.main()
