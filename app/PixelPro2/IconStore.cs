@@ -28,6 +28,33 @@ public static class IconStore {
         if(File.Exists(DeletePath(profile,key)))File.Delete(DeletePath(profile,key));
     }
 
+    public static void SaveMediaIcon(string mediaAction,int profile,int key) {
+        Ensure();
+        string glyph=mediaAction.Trim().ToUpperInvariant() switch {
+            "NEXT"=>"▶▶",
+            "PREV"=>"◀◀",
+            "STOP"=>"■",
+            "VOLUP"=>"VOL+",
+            "VOLDOWN"=>"VOL-",
+            "MUTE"=>"MUTE",
+            _=>"▶❚❚"
+        };
+
+        using var preview=new Bitmap(52,52);
+        using(var g=Graphics.FromImage(preview)) {
+            g.Clear(Color.FromArgb(28,30,34));
+            g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            float fontSize=glyph.Length>3?9f:glyph.Length>2?12f:18f;
+            using var font=new Font("Segoe UI",fontSize,FontStyle.Bold,GraphicsUnit.Point);
+            using var brush=new SolidBrush(Color.White);
+            var size=g.MeasureString(glyph,font);
+            g.DrawString(glyph,font,brush,(52-size.Width)/2f,(52-size.Height)/2f);
+        }
+        preview.Save(PreviewPath(profile,key),System.Drawing.Imaging.ImageFormat.Png);
+        File.WriteAllBytes(BinaryPath(profile,key),MediaCodec.FromIcon(PreviewPath(profile,key)));
+        if(File.Exists(DeletePath(profile,key)))File.Delete(DeletePath(profile,key));
+    }
+
     public static void MarkDeleted(int profile,int key) {
         Ensure();
         if(File.Exists(BinaryPath(profile,key)))File.Delete(BinaryPath(profile,key));
