@@ -58,7 +58,7 @@ Script kiểm tra SHA256 và dùng đúng merged offset.
 
 - USB phải enumerate HID + CDC.
 - Studio 2.3 mở CDC bằng DTR → RTS.
-- LCD được giữ tắt trong lúc controller init, fill trực tiếp nền UI một lần rồi mới Display ON.
+- LCD được giữ tắt trong lúc controller init, dùng timing ổn định của v2.2.1, clear đen trước Display ON rồi render UI.
 - Full flash không còn format SPIFFS trong `setup()`; vì vậy boot đầu tiên không nên bị đứng lâu để tạo filesystem.
 - SPIFFS chỉ được format on-demand khi lần đầu upload GIF/icon/PXS2 script nếu partition đang trống.
 - SD chỉ được probe khi Studio hỏi.
