@@ -14,8 +14,8 @@
 - UI được render trước storage optional.
 - SPIFFS mount bằng `begin(false)`; format chỉ khi upload media/icon/script lần đầu cần filesystem.
 - microSD được probe lazy qua `SDINFO`.
-- Rút ngắn HX8357-B startup delays, vẫn giữ >=120 ms sau Sleep Out.
-- LCD vẫn Display OFF → init/orientation/clear black → Display ON.
+- Khôi phục timing HX8357-B đã ổn định ở v2.2.1: 150 ms sau software reset, 150 ms sau Sleep Out và 50 ms trước khi coi Display ON hoàn tất; tránh tình trạng backlight sáng xám nhưng GRAM/UI chưa hiển thị trên panel thật.
+- Bỏ tối ưu single-fill ở frame đầu: LCD luôn Display OFF → init/orientation → clear black → Display ON, sau đó render lại nền/UI đầu tiên.
 
 ### Native HID
 
