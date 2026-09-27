@@ -5,7 +5,7 @@ namespace PixelPro2;
 
 public sealed class NamedPipePluginHost : IDisposable {
     public const string PipeName="PIXEL_PRO_2_PLUGINS";
-    readonly CancellationTokenSource shutdown=new();
+    CancellationTokenSource? lifetime;
     readonly object sync=new();
     readonly Dictionary<string,int> connected=new(StringComparer.OrdinalIgnoreCase);
     MonitorSnapshot? monitor;
@@ -15,7 +15,7 @@ public sealed class NamedPipePluginHost : IDisposable {
     public event Action? Updated;
     public event Action<string,bool>? ConnectionChanged;
 
-    public bool Running=>acceptLoop is {IsCompleted:false};
+    public bool Running=>lifetime is {IsCancellationRequested:false}&&acceptLoop is {IsCompleted:false};
 
     public MonitorSnapshot? Monitor {
         get{lock(sync)return monitor;}
@@ -29,7 +29,22 @@ public sealed class NamedPipePluginHost : IDisposable {
 
     public void Start() {
         if(Running)return;
-        acceptLoop=Task.Run(()=>AcceptLoop(shutdown.Token));
+        lifetime?.Dispose();
+        lifetime=new CancellationTokenSource();
+        acceptLoop=Task.Run(()=>AcceptLoop(lifetime.Token));
+    }
+
+    public void Stop() {
+        if(lifetime==null)return;
+        lifetime.Cancel();
+        lifetime.Dispose();
+        lifetime=null;
+        lock(sync) {
+            connected.Clear();
+            monitor=null;
+            music=null;
+        }
+        Updated?.Invoke();
     }
 
     async Task AcceptLoop(CancellationToken token) {
@@ -112,10 +127,7 @@ public sealed class NamedPipePluginHost : IDisposable {
     public void ClearMonitor(){lock(sync)monitor=null;Updated?.Invoke();}
     public void ClearMusic(){lock(sync)music=null;Updated?.Invoke();}
 
-    public void Dispose() {
-        shutdown.Cancel();
-        shutdown.Dispose();
-    }
+    public void Dispose()=>Stop();
 }
 
 public sealed class PluginProcessManager : IDisposable {
