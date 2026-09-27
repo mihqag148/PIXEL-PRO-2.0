@@ -39,6 +39,10 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('validateScriptBytes',firmware)
         self.assertIn('SCRIPT"&&n==7',firmware)
         self.assertIn('runScript(now);',firmware)
+        self.assertIn('memcmp(d,"PXS2",4)',firmware)
+        self.assertIn('steps>512',firmware)
+        self.assertIn('screenOffSeconds',firmware)
+        self.assertIn('cmd=="SCREENOFF"',firmware)
 
 if __name__=='__main__':
     unittest.main()
