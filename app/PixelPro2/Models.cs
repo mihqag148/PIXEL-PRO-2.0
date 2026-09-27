@@ -171,19 +171,29 @@ public static class HidShortcut {
         if(parts.Length<1||parts.Length>5)return false;
         foreach(var p in parts) {
             switch(p) {
-                case "CTRL":modifiers|=1;continue;
+                case "CTRL":
+                case "CONTROL":modifiers|=1;continue;
                 case "SHIFT":modifiers|=2;continue;
-                case "ALT":modifiers|=4;continue;
-                case "WIN":modifiers|=8;continue;
+                case "ALT":
+                case "OPTION":modifiers|=4;continue;
+                case "WIN":
+                case "WINDOWS":
+                case "COMMAND":modifiers|=8;continue;
             }
             if(usage!=0)return false;
             usage=p switch {
                 _ when p.Length==1&&p[0] is >= 'A' and <= 'Z' => 4+(p[0]-'A'),
                 "1"=>30,"2"=>31,"3"=>32,"4"=>33,"5"=>34,"6"=>35,"7"=>36,"8"=>37,"9"=>38,"0"=>39,
                 "ENTER"=>40,"ESC"=>41,"BACKSPACE"=>42,"TAB"=>43,"SPACE"=>44,
+                "CAPSLOCK"=>57,"CAPLOCKS"=>57,
+                "PRINTSCREEN"=>70,"SCROLLLOCK"=>71,"PAUSE"=>72,"BREAK"=>72,
                 "INSERT"=>73,"HOME"=>74,"PAGEUP"=>75,"DELETE"=>76,"END"=>77,"PAGEDOWN"=>78,
                 "RIGHT"=>79,"LEFT"=>80,"DOWN"=>81,"UP"=>82,
-                _ when p.StartsWith('F')&&int.TryParse(p[1..],out int fn)&&fn is >=1 and <=12 => 57+fn,
+                "NUMLOCK"=>83,"KP_SLASH"=>84,"KP_ASTERISK"=>85,"KP_MINUS"=>86,"KP_PLUS"=>87,
+                "KP_ENTER"=>88,"KP_1"=>89,"KP_2"=>90,"KP_3"=>91,"KP_4"=>92,"KP_5"=>93,
+                "KP_6"=>94,"KP_7"=>95,"KP_8"=>96,"KP_9"=>97,"KP_0"=>98,"KP_DOT"=>99,
+                "MENU"=>101,"POWER"=>102,"KP_EQUAL"=>103,
+                _ when p.StartsWith('F')&&int.TryParse(p[1..],out int fn)&&fn is >=1 and <=24 => 57+fn,
                 _=>0
             };
             if(usage==0)return false;
@@ -202,9 +212,15 @@ public static class HidShortcut {
             >=30 and <=38 => (usage-29).ToString(),
             39 => "0",
             40 => "ENTER",41=>"ESC",42=>"BACKSPACE",43=>"TAB",44=>"SPACE",
+            57=>"CAPSLOCK",70=>"PRINTSCREEN",71=>"SCROLLLOCK",72=>"PAUSE",
             73=>"INSERT",74=>"HOME",75=>"PAGEUP",76=>"DELETE",77=>"END",78=>"PAGEDOWN",
             79=>"RIGHT",80=>"LEFT",81=>"DOWN",82=>"UP",
-            >=58 and <=69 => $"F{usage-57}",
+            83=>"NUMLOCK",84=>"KP_SLASH",85=>"KP_ASTERISK",86=>"KP_MINUS",87=>"KP_PLUS",
+            88=>"KP_ENTER",89=>"KP_1",90=>"KP_2",91=>"KP_3",92=>"KP_4",93=>"KP_5",
+            94=>"KP_6",95=>"KP_7",96=>"KP_8",97=>"KP_9",98=>"KP_0",99=>"KP_DOT",
+            101=>"MENU",102=>"POWER",103=>"KP_EQUAL",
+            >=58 and <=81 when usage is not (70 or 71 or 72 or 73 or 74 or 75 or 76 or 77 or 78 or 79 or 80 or 81) => $"F{usage-57}",
+            >=104 and <=115 => $"F{usage-91}",
             _=>$"HID{usage}"
         };
         parts.Add(key);
