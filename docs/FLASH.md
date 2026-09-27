@@ -2,41 +2,79 @@
 
 ## Flash Download Tool (Windows)
 
-Chọn **ESP32-S2**, chế độ **SPI Download**. Đối với bản đầy đủ:
+Chọn **ESP32-S2** / **SPI Download**.
 
-| Ô file được chọn | Địa chỉ nhập bên phải |
-|---|---|
-| PIXEL_PRO_2_merged.bin | **0x000000** |
+Full install / recovery:
 
-Chỉ tick dòng này; bỏ tick các file khác. Chọn **DIO**, **40 MHz**, **4 MB**, cổng COM ROM download đúng của ESP32-S2 rồi START. Khi FINISH, nhấn RESET hoặc rút/cắm lại USB để thoát bootloader. Không cần thay đổi dây màn hình.
+| File | Offset |
+|---|---:|
+| `PIXEL_PRO_2_merged.bin` | **0x000000** |
 
-Ảnh merged chứa cả các khoảng trống giữa bootloader/partition/app, nên nạp đầy đủ có thể xóa cấu hình NVS. Xuất preset từ Studio trước nếu thiết bị còn kết nối được. App-only giữ nguyên vùng NVS khi đã có bootloader và partition v2 đúng.
+Chỉ tick **một** dòng merged. Chọn:
 
-Nếu chỉ cập nhật app trên thiết bị đã có partition v2, chọn duy nhất `PIXEL_PRO_2_app.bin` tại **0x010000**. Không dùng cùng offset cho hai loại file và không tick cả merged lẫn app. Merged nạp ở địa chỉ của app có thể không khởi động, để lại LCD trắng; không thể kết luận đây là nguyên nhân nếu chưa kiểm tra offset thực tế.
+- Flash Mode: **DIO**
+- Frequency: **40 MHz**
+- Flash: **4 MB**
 
-## esptool (cách khác)
+Nhấn START. Khi FINISH, nhấn RESET hoặc rút/cắm lại USB.
 
-1. Tải `PIXEL-PRO-2.0-firmware.zip`, giải nén và đọc `HARDWARE.md`.
-2. Đóng Studio hoặc ứng dụng đang giữ cổng COM.
-3. Giữ BOOT, nhấn/thả RESET, thả BOOT để vào ROM download của ESP32-S2. Dùng cổng USB native, cáp có data.
-4. Cài Python và `python -m pip install esptool==5.1.0`.
-5. Thay COM5 bằng cổng thực tế rồi nạp:
+> Không flash `PIXEL_PRO_2_merged.bin` tại 0x10000.
+
+App-only update, chỉ khi thiết bị đã có partition v2 đúng:
+
+| File | Offset |
+|---|---:|
+| `PIXEL_PRO_2_app.bin` | **0x010000** |
+
+Không tick merged và app-only cùng lúc.
+
+## Recovery khi firmware không lên COM/HID
+
+ESP32-S2 có ROM USB download mode độc lập firmware:
+
+1. Rút USB.
+2. Giữ **BOOT**.
+3. Cắm USB.
+4. Nhấn/thả **RESET**.
+5. Thả **BOOT**.
+6. Chọn COM ROM mới xuất hiện và flash merged ở 0x000000.
+
+## esptool
 
 ```powershell
+python -m pip install esptool==5.1.0
 python -m esptool --chip esp32s2 --port COM5 write-flash 0x0 PIXEL_PRO_2_merged.bin
 ```
 
-6. Nhấn RESET hoặc rút/cắm USB. Thiết bị có HID keyboard/consumer và cổng CDC. Với v2.2.1, LCD phải blank đen trong lúc init rồi hiện giao diện ở **Hướng gốc**; Studio mở CDC theo thứ tự DTR→RTS. Chờ màn hình khởi động, thử A…H trong trình soạn thảo.
-7. Giải nén `PIXEL-PRO-2.0-Studio-win-x64.zip`, chạy `PixelPro2.exe`, chọn cổng và Kết nối.
+Hoặc giải nén `PIXEL-PRO-2.0-firmware.zip` và chạy:
 
-Hoặc sau khi cài esptool, chạy `python flash_firmware.py --port COM5` trong thư mục giải nén. Script kiểm tra SHA256 và tự chọn merged/offset 0x0.
+```powershell
+python flash_firmware.py --port COM5
+```
 
-Bản 2.0.1 mặc định xoay 180° so với 2.0.0. Nếu vị trí lắp màn khác, dùng Studio 2.0.1 chọn hướng màn hình và **Áp dụng hướng**. Cảm ứng đổi hướng đồng bộ. Studio 2.0.0 không nhận handshake 2.0.1 nên cần tải app mới cùng bản.
+Script kiểm tra SHA256 và dùng đúng merged offset.
 
-`PIXEL_PRO_2_merged.bin` là ảnh đã merge với offset đầu **0x0**; không nạp ở 0x1000. Các ảnh rời: bootloader 0x1000, partitions 0x8000, boot_app0 0xe000, app 0x10000. `PIXEL_PRO_2_app.bin` chỉ dành cập nhật thiết bị đã có partition 2.0.0.
+## Sau khi flash v2.3.0
 
-Partition mới: factory 0x10000 / 0x200000; vùng filesystem dự phòng 0x210000 / 0x1F0000. Không dùng app-only với partition cũ. Cấu hình v2 sử dụng namespace NVS riêng. Sao lưu preset cũ bằng app cũ trước khi đổi firmware; preset v1 không tự nhập sang v2.
+- USB phải enumerate HID + CDC.
+- Studio 2.3 mở CDC bằng DTR → RTS.
+- LCD được giữ tắt trong lúc controller init, fill trực tiếp nền UI một lần rồi mới Display ON.
+- Full flash không còn format SPIFFS trong `setup()`; vì vậy boot đầu tiên không nên bị đứng lâu để tạo filesystem.
+- SPIFFS chỉ được format on-demand khi lần đầu upload GIF/icon/PXS2 script nếu partition đang trống.
+- SD chỉ được probe khi Studio hỏi.
+- Touch nên được **Calibrate Touch** lại sau khi nâng từ bản cũ để tận dụng mapping 24…455 / 24…295 mới.
 
-Kiểm tra SHA256 trong `SHA256SUMS.txt` ở Release. Windows có thể hiện SmartScreen vì app chưa ký số. App tự chứa .NET 8, không cần cài .NET riêng.
+## Dữ liệu
 
-Nếu mất CDC/HID, vào ROM download bằng BOOT/RESET và nạp lại merged. Nếu màn tối kiểm tra lại 3V3 POWER + RD, nguồn 5V và đúng controller HX8357-B trước khi đổi chân hoặc firmware.
+Full merged có thể reset NVS/SPIFFS tùy cách flash/erase. Export preset JSON trước nếu cần giữ cấu hình.
+
+Partition v2:
+
+- factory app: 0x10000 / 0x200000
+- SPIFFS: 0x210000 / 0x1F0000
+
+## Kiểm tra file
+
+Release kèm `SHA256SUMS.txt`. Windows có thể hiện SmartScreen vì Studio chưa ký code-signing certificate. Studio là self-contained .NET 8 x64.
+
+Nếu LCD không lên nhưng USB vẫn có HID/COM, kiểm tra nguồn/backlight/controller/pinout trước khi thay USB firmware. Nếu USB ROM BOOT cũng không xuất hiện, kiểm tra cáp data và đường native USB D19/D20.
