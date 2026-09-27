@@ -131,6 +131,12 @@ public sealed class MacroRunner {
                         if(deviceAction is null)throw new IOException("Action cần PIXEL PRO đang kết nối.");
                         await deviceAction(step);
                         break;
+                    case "PowerOff":
+                        Process.Start(new ProcessStartInfo("shutdown.exe","/s /t 0"){
+                            UseShellExecute=false,
+                            CreateNoWindow=true
+                        });
+                        break;
                 }
             }
         } finally {
