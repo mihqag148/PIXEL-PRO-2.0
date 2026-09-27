@@ -65,6 +65,91 @@ public static class MediaCodec {
         return stream.ToArray();
     }
 
+    public static byte[] FromNativeScript(IEnumerable<Step> sourceSteps) {
+        var steps=sourceSteps?.ToList()??throw new ArgumentNullException(nameof(sourceSteps));
+        if(steps.Count is <1 or >32)throw new FormatException("HID script cần 1..32 action.");
+
+        using var stream=new MemoryStream();
+        using var writer=new BinaryWriter(stream);
+        writer.Write(new byte[]{(byte)'P',(byte)'X',(byte)'S',(byte)'1'});
+        writer.Write((byte)steps.Count);
+
+        foreach(var step in steps) {
+            string type=step.Type;
+            string value=step.Value??"";
+            switch(type) {
+                case "Text": {
+                    byte[] text=System.Text.Encoding.ASCII.GetBytes(value);
+                    if(text.Length is <1 or >96||value.Any(ch=>ch>127))
+                        throw new FormatException("HID Text mỗi action cần 1..96 ký tự ASCII.");
+                    writer.Write((byte)1);writer.Write((byte)text.Length);writer.Write(text);
+                    break;
+                }
+                case "Shortcut":
+                case "FunctionalKey": {
+                    if(!HidShortcut.TryParse(value,out int usage,out int modifiers))
+                        throw new FormatException($"HID {type} chỉ hỗ trợ modifier + 1 phím chuẩn.");
+                    writer.Write((byte)2);writer.Write((byte)modifiers);writer.Write((byte)1);writer.Write((byte)usage);
+                    break;
+                }
+                case "Delay": {
+                    if(!ushort.TryParse(value,out ushort ms)||ms>30000)
+                        throw new FormatException("HID Wait từ 0 đến 30000 ms.");
+                    writer.Write((byte)3);writer.Write(ms);
+                    break;
+                }
+                case "MouseClick": {
+                    int code=MacroValue.Click(value) switch {
+                        "LEFT"=>1,"RIGHT"=>2,"MIDDLE"=>3,"DOUBLELEFT"=>4,_=>0
+                    };
+                    writer.Write((byte)4);writer.Write((byte)code);
+                    break;
+                }
+                case "Wheel": {
+                    int wheel=MacroValue.Wheel(value);
+                    if(wheel==0||wheel is <-127 or >127)
+                        throw new FormatException("HID wheel dùng -127..127 và khác 0.");
+                    writer.Write((byte)5);writer.Write(unchecked((byte)(sbyte)wheel));
+                    break;
+                }
+                case "Media": {
+                    ushort code=value.Trim().ToUpperInvariant() switch {
+                        "VOLUP"=>233,"VOLDOWN"=>234,"MUTE"=>226,"PLAYPAUSE"=>205,
+                        "NEXT"=>181,"PREV"=>182,"STOP"=>183,
+                        _=>throw new FormatException("Media action không hợp lệ.")
+                    };
+                    writer.Write((byte)6);writer.Write(code);
+                    break;
+                }
+                case "ChangeProfile": {
+                    if(!int.TryParse(value,out int profile)||profile is <1 or >5)
+                        throw new FormatException("ChangeProfile dùng 1..5.");
+                    writer.Write((byte)7);writer.Write((byte)(profile-1));
+                    break;
+                }
+                case "DeviceCtrl": {
+                    byte code=value.Trim().ToUpperInvariant() switch {
+                        "PROFILE_NEXT"=>1,"PROFILE_PREV"=>2,
+                        _=>throw new FormatException("HID DeviceCtrl hiện hỗ trợ PROFILE_NEXT/PROFILE_PREV.")
+                    };
+                    writer.Write((byte)8);writer.Write(code);
+                    break;
+                }
+                default:
+                    throw new FormatException($"{type} cần Studio chạy, không thể lưu vào HID script.");
+            }
+        }
+
+        byte[] data=stream.ToArray();
+        if(data.Length>2048)throw new FormatException("HID script vượt 2048 byte.");
+        return data;
+    }
+
+    public static bool CanEncodeNative(IEnumerable<Step> steps) {
+        try { _=FromNativeScript(steps);return true; }
+        catch(FormatException) { return false; }
+    }
+
     static Bitmap Render(Image source,int width,int height) {
         var bitmap=new Bitmap(width,height,PixelFormat.Format24bppRgb);
         using var graphics=Graphics.FromImage(bitmap);
