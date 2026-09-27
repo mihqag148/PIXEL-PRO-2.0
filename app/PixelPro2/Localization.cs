@@ -85,7 +85,8 @@ public static class UiText {
         ["Filter Duplicated"]=("Lọc trùng lặp","过滤重复"),
         ["Search presets..."]=("Tìm preset...","搜索预设..."),
         ["Add Preset"]=("Thêm Preset","添加预设"),
-        ["Local"]=("Cục bộ","本地")
+        ["Local"]=("Cục bộ","本地"),
+        ["All"]=("Tất cả","全部")
     };
 
     static readonly Dictionary<string,(string vi,string zh)> ActionMap=new(StringComparer.Ordinal) {
