@@ -23,12 +23,18 @@ public sealed class Device : IDisposable {
             NewLine="\n",
             ReadTimeout=250,
             WriteTimeout=2500,
-            DtrEnable=true,
-            RtsEnable=true,
+            DtrEnable=false,
+            RtsEnable=false,
             Handshake=Handshake.None
         };
         serial.Open();
         try { serial.DiscardInBuffer(); serial.DiscardOutBuffer(); } catch(InvalidOperationException) {}
+        // Assert DTR first, then RTS. On Arduino-ESP32 USBCDC this avoids
+        // accidentally walking the legacy reboot-to-bootloader line-state
+        // sequence while still ending with both lines asserted for CDC.
+        serial.DtrEnable=true;
+        await Task.Delay(25);
+        serial.RtsEnable=true;
         port=serial;
         lifetime=new CancellationTokenSource();
         var token=lifetime.Token;
