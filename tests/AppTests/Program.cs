@@ -36,6 +36,43 @@ Reject(()=>MacroValue.Click("SIDE"));
 Check(HidShortcut.TryParse("CTRL+SHIFT+S",out int hidUsage,out int hidMods));
 Check(hidUsage==22&&hidMods==3);
 Check(HidShortcut.Format(hidUsage,hidMods)=="CTRL+SHIFT+S");
+Check(HidShortcut.TryParse("F24",out int f24,out int f24mods)&&f24==115&&f24mods==0);
+Check(HidShortcut.TryParse("COMMAND+OPTION+F13",out int f13,out int macMods)&&f13==104&&macMods==(8|4));
+Check(HidShortcut.TryParse("PRINTSCREEN",out int printUsage,out _)&&printUsage==70);
+Check(HidShortcut.TryParse("KP_9",out int kp9,out _)&&kp9==97);
+
+var eezScript=EezScript.Expand("""
+WINDOWS r
+DELAY 500
+STRING www.example.com
+ENTER
+MOUSE_MOVE 100 -20
+LMOUSE
+REPEAT 1
+GOTO_PROFILE 25
+PREV_PROFILE
+NEXT_PROFILE
+""",true);
+Check(eezScript.Any(x=>x.Type=="NativeChordTimed"));
+Check(eezScript.Any(x=>x.Type=="NativeTextTimed"));
+Check(eezScript.Any(x=>x.Type=="NativeMouseMove"));
+Check(eezScript.Count(x=>x.Type=="MouseClick")>=2);
+byte[] scriptBinary=MediaCodec.FromNativeScript([new Step{Type="Script",Value="""
+DEFAULTDURATION 35
+DEFAULTCHARDELAY 25
+DEFAULTDELAY 18
+CONTROL SHIFT ESC
+STRING hello
+MOUSE_MOVE 10 0
+F24
+KP_9
+"""}]);
+Check(scriptBinary[0]=='P'&&scriptBinary[3]=='2');
+Check(scriptBinary.Contains((byte)9));
+Check(scriptBinary.Contains((byte)12));
+Check(scriptBinary.Contains((byte)13));
+Reject(()=>EezScript.Expand("MOUSE_MOVE 999 0",true));
+Reject(()=>EezScript.Expand("GOTO_PROFILE 26",true));
 
 var nativeSteps=Enumerable.Range(0,512)
     .Select(_=>new Step{Type="Delay",Value="1"}).ToList();
