@@ -43,7 +43,7 @@ public static class PresetGallery {
                  Key("In","I"),Key("Out","O"),Key("Left","LEFT"),Key("Right","RIGHT"))),
         new("Photoshop","Creative","Common Photoshop shortcuts",
             Make(Key("Brush","B"),Key("Move","V"),Key("Select","M"),Key("Crop","C"),
-                 Key("Undo","CTRL+Z"),Key("Save","CTRL+S"),Key("Zoom +","CTRL++"),Key("Zoom -","CTRL+-")))
+                 Key("Undo","CTRL+Z"),Key("Save","CTRL+S"),Key("100%","CTRL+1"),Key("Fit","CTRL+0")))
     ];
 }
 
