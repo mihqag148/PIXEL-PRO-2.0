@@ -29,7 +29,7 @@ Firmware ESP32-S2 + Studio Windows cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B
 - không format filesystem trước khi UI lên,
 - SPIFFS mount không-format; format chỉ khi lần upload đầu thực sự cần,
 - SD chỉ probe khi Studio hỏi,
-- rút ngắn startup delay HX8357-B nhưng vẫn giữ Sleep-Out timing cần thiết.
+- giữ lại timing HX8357-B đã ổn định của v2.2.1 để tránh trạng thái backlight sáng xám/GRAM chưa sẵn sàng; phần boot nhanh hơn đến từ việc bỏ format SPIFFS lúc `setup()` và trì hoãn probe SD.
 
 ### Studio 2.3
 
