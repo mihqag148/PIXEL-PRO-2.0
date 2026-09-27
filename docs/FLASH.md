@@ -1,4 +1,4 @@
-# Nạp PIXEL PRO 2.0 v2.4
+# Nạp PIXEL PRO 2.0 v2.5
 
 ## Full flash
 
@@ -24,7 +24,7 @@ Nếu firmware không enumerate:
 
 ## Touch sau khi nâng từ 2.3
 
-Dùng **Studio 2.4**:
+Dùng **Studio 2.5**:
 1. Connect / Auto Find.
 2. Display & Media → **Reset Touch**.
 3. bật **Touch Diagnostics**.
@@ -43,4 +43,4 @@ python -m pip install esptool==5.1.0
 python -m esptool --chip esp32s2 --port COM5 write-flash 0x0 PIXEL_PRO_2_merged.bin
 ```
 
-Full merged có thể reset NVS/SPIFFS. Export preset trước nếu cần. v2.4 không auto-format SPIFFS trong setup; filesystem chỉ được format on-demand khi upload media/icon/script.
+Full merged có thể reset NVS/SPIFFS. Export preset trước nếu cần. v2.5 không auto-format SPIFFS trong setup; filesystem chỉ được format on-demand khi upload media/icon/script.
