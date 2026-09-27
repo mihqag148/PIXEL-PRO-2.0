@@ -206,6 +206,7 @@ public static class HidShortcut {
 public sealed class Preset {
     public int Schema { get; set; }=3;
     public List<AutoProfileRule> AutoProfiles { get; set; }=[];
+    public bool AutoProfileEnabled { get; set; }=true;
     public Binding[][] Profiles { get; set; }=Enumerable.Range(0,5)
         .Select(_=>Enumerable.Range(0,8)
             .Select(k=>new Binding{Code=4+k,Label=$"Key {(char)('A'+k)}"})
