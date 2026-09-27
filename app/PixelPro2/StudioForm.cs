@@ -1201,7 +1201,7 @@ public sealed class StudioForm : Form {
             LoadEditor();
             SaveLocal();
             status.Text=$"Preset added to Profile {currentProfile+1} · sync when ready";
-        });
+        },languageCode);
         gallery.ShowDialog(this);
         return Task.CompletedTask;
     }
