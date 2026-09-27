@@ -415,7 +415,7 @@ public sealed class StudioForm : Form {
 
         var note=new Label{
             AutoSize=true,MaximumSize=new Size(820,0),Padding=new Padding(0,12,0,0),
-            Text="Touch 2.3.1: raw axes follow the actual MCUFRIEND wiring (screen X comes from rawY, screen Y from rawX). Calibration uses a 4-point affine solve that handles axis swap, inversion and panel skew. Hold each target briefly, then release before touching the next one."
+            Text="Touch 2.4: raw axes follow the actual MCUFRIEND wiring (screen X comes from rawY, screen Y from rawX). Calibration uses a 4-point affine solve that handles axis swap, inversion and panel skew. Hold each target briefly, then release before touching the next one."
         };
         flow.Controls.Add(note);
         return flow;
@@ -816,7 +816,7 @@ public sealed class StudioForm : Form {
             AutoProfiles=preset.AutoProfiles.Select(r=>new AutoProfileRule{Process=r.Process,Profile=r.Profile,Enabled=r.Enabled}).ToList(),
             AutoProfileEnabled=preset.AutoProfileEnabled
         };
-        for(int p=0;p<5;p++)for(int k=0;k<8;k++) {
+        for(int p=0;p<DeviceLimits.Profiles;p++)for(int k=0;k<DeviceLimits.Keys;k++) {
             var old=preset.Profiles[p][k];
             var b=Binding.Parse(await device.Request($"GET|{p}|{k}"));
             b.Steps=old.Steps?.Select(CloneStep).ToList()??[];
@@ -873,7 +873,7 @@ public sealed class StudioForm : Form {
         SaveEditor();SaveRulesGrid();preset.Validate();SaveLocal();
         transfer.Value=0;
         int scriptCount=0;
-        for(int p=0;p<5;p++)for(int k=0;k<8;k++)if(preset.Profiles[p][k].Type=="S")scriptCount++;
+        for(int p=0;p<DeviceLimits.Profiles;p++)for(int k=0;k<DeviceLimits.Keys;k++)if(preset.Profiles[p][k].Type=="S")scriptCount++;
         int scriptDone=0;
 
         for(int p=0;p<5;p++)for(int k=0;k<8;k++) {
@@ -1021,7 +1021,7 @@ public sealed class StudioForm : Form {
         status.Text="Hold each target briefly, then release before the next target";
         MessageBox.Show(this,
             "Chạm và GIỮ nhẹ từng dấu + khoảng 0,1 giây rồi nhả tay hoàn toàn.\n\nThứ tự: trên-trái → trên-phải → dưới-phải → dưới-trái.\n\nMỗi điểm chỉ chuyển tiếp sau khi bạn nhả tay.",
-            "Touch Calibration 2.3.1",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            "Touch Calibration 2.4",MessageBoxButtons.OK,MessageBoxIcon.Information);
     }
 
     async Task ResetTouchCalibration() {
