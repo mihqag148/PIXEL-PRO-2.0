@@ -94,7 +94,8 @@ public static class UiText {
         ["ChangeProfile"]=("Đổi Profile","切换配置"),
         ["FunctionalKey"]=("Phím chức năng","功能键"),
         ["DeviceCtrl"]=("Điều khiển thiết bị","设备控制"),
-        ["PowerOff"]=("Tắt máy tính","关闭电脑")
+        ["PowerOff"]=("Tắt máy tính","关闭电脑"),
+        ["Script"]=("Kịch bản","脚本")
     };
 
     public static string Translate(string english,string code) {
