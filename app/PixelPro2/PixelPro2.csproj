@@ -11,6 +11,5 @@
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="10.0.3" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
-    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.26100.7705" />
   </ItemGroup>
 </Project>
