@@ -209,7 +209,7 @@ public sealed class StudioForm : Form {
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,570));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
-        var keysBox=new GroupBox{Text=$"Profile & Key Selection · {DeviceLimits.Profiles} profiles",Dock=DockStyle.Fill,Padding=new Padding(10)};
+        var keysBox=new GroupBox{Text=$"STEP 1: Select The Key You Want To Config · {DeviceLimits.Profiles} profiles",Dock=DockStyle.Fill,Padding=new Padding(10)};
         var keysLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1};
         keysLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,175));
         keysLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
@@ -400,16 +400,18 @@ public sealed class StudioForm : Form {
         right.RowStyles.Add(new RowStyle(SizeType.Absolute,112));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
 
-        var top=new GroupBox{Text="Selected Key",Dock=DockStyle.Fill};
+        var top=new GroupBox{Text="STEP 2: Config The Name, Icon And Action Of The Key",Dock=DockStyle.Fill};
         var topFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(10),WrapContents=false};
         topFlow.Controls.Add(new Label{Text="Display name",AutoSize=true,Padding=new Padding(0,7,4,0)});
         topFlow.Controls.Add(alias);
+        topFlow.Controls.Add(MakeButton("Select Icon File",UploadIcon));
+        topFlow.Controls.Add(MakeButton("Empty Icon",DeleteIcon));
         topFlow.Controls.Add(hidMode);
         topFlow.Controls.Add(armed);
         top.Controls.Add(topFlow);
         right.Controls.Add(top,0,0);
 
-        var seqBox=new GroupBox{Text="Action Sequence",Dock=DockStyle.Fill,Padding=new Padding(8)};
+        var seqBox=new GroupBox{Text="Action Sequence  ·  Actions / Parameter",Dock=DockStyle.Fill,Padding=new Padding(8)};
         seqBox.Controls.Add(sequence);
         right.Controls.Add(seqBox,0,1);
 
