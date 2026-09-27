@@ -37,6 +37,8 @@ jobs:
           done
           arduino-cli lib install 'Adafruit BusIO@1.17.4' 'Adafruit GFX Library@1.11.11' 'Adafruit NeoPixel@1.15.5'
       - name: Compile actual ESP32-S2 firmware
+        # Keep CDCOnBoot=default: firmware owns CDC interface 0 via USBCDC usbLink.
+        # Enabling core CDC here would create a competing native CDC instance.
         run: >-
           arduino-cli compile
           --fqbn 'esp32:esp32:esp32s2:PSRAM=enabled,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,FlashMode=dio'
