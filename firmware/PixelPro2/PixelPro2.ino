@@ -54,7 +54,7 @@ Pixel::Debounce keys[8],push,touch;
 bool suppressed[8]{};
 Pixel::Binding held[8]{};
 Pixel::LineBuffer<192> input;
-bool displayDirty=true,initialPanelBackground=true,sdReady=false,sdAttempted=false,flashReady=false,flashAttempted=false;
+bool displayDirty=true,sdReady=false,sdAttempted=false,flashReady=false,flashAttempted=false;
 uint8_t dirtyTiles=255;
 uint32_t lastScan=0,lastTouch=0,lastInput=0;
 uint16_t consumerHeld=0;
@@ -558,8 +558,7 @@ void drawMonitorScreen() {
 void render() {
   if(!panelAwake||mediaActive||calibrating||monitorActive)return;
   if(displayDirty) {
-    if(!initialPanelBackground)panel.fillScreen(0x0843);
-    initialPanelBackground=false;
+    panel.fillScreen(0x0843);
     panel.setTextSize(2);
     panel.setTextColor(0xFFFF);
     panel.setCursor(12,10);
@@ -942,7 +941,7 @@ void setup() {
   leds.begin();
   leds.clear();
   leds.show();
-  panel.begin(displayMode,0x0843);
+  panel.begin(displayMode);
 
   // Draw the key UI before touching optional filesystems so the device feels
   // ready immediately after reset/flash.
