@@ -60,8 +60,13 @@ public sealed class MacroRunner {
         binding.Validate();
         running=true;
         var held=new List<ushort>();
+        var executionSteps=new List<Step>();
+        foreach(var source in binding.Steps) {
+            if(source.Type=="Script")executionSteps.AddRange(EezScript.Expand(source.Value,false));
+            else executionSteps.Add(source);
+        }
         try {
-            foreach(var step in binding.Steps) {
+            foreach(var step in executionSteps) {
                 token.ThrowIfCancellationRequested();
                 switch(step.Type) {
                     case "Delay":
