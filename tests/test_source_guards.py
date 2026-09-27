@@ -40,7 +40,10 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('touchMedian7',firmware)
         self.assertIn('TOUCHDIAG',firmware)
         self.assertNotIn('pressure>=45',firmware)
-        self.assertIn('constexpr uint32_t pollMs=10',firmware)
+        self.assertIn('constexpr uint32_t pollMs=20',firmware)
+        self.assertIn('constexpr uint8_t confirmCount=3',firmware)
+        self.assertIn('constexpr uint8_t releaseMissCount=4',firmware)
+        self.assertIn('uint16_t stabilityLimit=calibrating?180:100',firmware)
         setup=firmware.split('void setup()',1)[1]
         self.assertIn('flashReady=SPIFFS.begin(false);',setup)
         self.assertNotIn('flashReady=SPIFFS.begin(true);',setup)
