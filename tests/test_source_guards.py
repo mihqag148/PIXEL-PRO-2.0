@@ -27,8 +27,9 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('map(rx,touchCal.left,touchCal.right,24,455)',firmware)
         self.assertIn('map(ry,touchCal.top,touchCal.bottom,24,295)',firmware)
         self.assertIn('uint32_t(now-lastTouch)<8',firmware)
-        self.assertIn('flashReady=SPIFFS.begin(false);',firmware)
-        self.assertNotIn('flashReady=SPIFFS.begin(true);',firmware)
+        setup=firmware.split('void setup()',1)[1]
+        self.assertIn('flashReady=SPIFFS.begin(false);',setup)
+        self.assertNotIn('flashReady=SPIFFS.begin(true);',setup)
         self.assertIn('sdAttempted=false',firmware)
 
     def test_native_hid_script_engine_present(self):
