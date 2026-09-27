@@ -902,6 +902,20 @@ void consumeUpload() {
   }
 }
 
+uint32_t keymapHash() {
+  uint32_t hash=2166136261UL;
+  auto add=[&](uint8_t value){hash^=value;hash*=16777619UL;};
+  for(int p=0;p<Pixel::Profiles;p++)for(int k=0;k<Pixel::Keys;k++) {
+    const auto& binding=config.bindings[p][k];
+    add(uint8_t(binding.type));
+    add(uint8_t(binding.code));add(uint8_t(binding.code>>8));
+    add(binding.modifiers);
+    add(uint8_t(binding.color));add(uint8_t(binding.color>>8));
+    for(size_t i=0;i<sizeof(binding.label);i++)add(uint8_t(binding.label[i]));
+  }
+  return hash;
+}
+
 void request(char* line) {
   char* tokens[12]{};
   int n=0;
@@ -927,6 +941,7 @@ void request(char* line) {
     ok("PIXELPRO2|2.4.0|25|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,TOUCHDIAG,SD,PANEL,MEDIA,SAVER,ICON,MONITOR,MOUSE,SCRIPT");
     return;
   }
+  if(cmd=="KEYHASH"&&n==2){ok(String(keymapHash()));return;}
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
   if(cmd=="DISPLAY"&&n==3&&Pixel::number(tokens[2],3,v)) {
     if(prefs.putUChar("orient2",v)!=1){error("STORAGE");return;}
