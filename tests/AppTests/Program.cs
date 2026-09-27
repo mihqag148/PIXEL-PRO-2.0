@@ -145,4 +145,19 @@ try {
     Check(loadedProfile.Keys.Length==8&&loadedProfile.Keys[0].Label=="Imported");
 } finally { File.Delete(profilePath); }
 
+var envelope=new PluginEnvelope{
+    Type="monitor",Plugin="PC Monitor",
+    Monitor=new MonitorSnapshot(10,20,30,40,500,60,70)
+};
+var parsedEnvelope=PluginEnvelope.Parse(PluginEnvelope.Serialize(envelope));
+Check(parsedEnvelope is not null&&parsedEnvelope.Plugin=="PC Monitor");
+Check(parsedEnvelope!.Monitor.HasValue&&parsedEnvelope.Monitor.Value.GpuPercent==20);
+
+var musicEnvelope=new PluginEnvelope{
+    Type="music",Plugin="Music Player",
+    Music=new NowPlayingSnapshot("Song","Artist","Album","Spotify",true)
+};
+var parsedMusic=PluginEnvelope.Parse(PluginEnvelope.Serialize(musicEnvelope));
+Check(parsedMusic?.Music is {Playing:true}&&parsedMusic.Music.Value.Title=="Song");
+
 Console.WriteLine("App protocol, 25-profile migration, macro validation and preset round-trip tests passed.");
