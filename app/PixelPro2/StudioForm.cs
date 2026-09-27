@@ -666,6 +666,12 @@ public sealed class StudioForm : Form {
         stepValue.TextChanged+=(_,_)=>{
             if(loading||sequence.SelectedItem is not StepItem item)return;
             item.Step.Value=stepValue.Text;
+            if(item.Step.Type=="Media"&&
+               new[]{"VOLUP","VOLDOWN","MUTE","PLAYPAUSE","NEXT","PREV","STOP"}
+                   .Contains(stepValue.Text.Trim().ToUpperInvariant())) {
+                IconStore.SaveMediaIcon(stepValue.Text,currentProfile,currentKey);
+                ReloadIconPreview(currentProfile,currentKey);
+            }
             sequence.Refresh();
         };
 
@@ -863,6 +869,10 @@ public sealed class StudioForm : Form {
         var item=new StepItem(new Step{Type=action.Type,Value=action.DefaultValue});
         sequence.Items.Add(item);
         sequence.SelectedIndex=sequence.Items.Count-1;
+        if(action.Type=="Media") {
+            IconStore.SaveMediaIcon(action.DefaultValue,currentProfile,currentKey);
+            ReloadIconPreview(currentProfile,currentKey);
+        }
         hidMode.Checked=action.HidCapable&&hidMode.Checked;
         UpdateModeInfo();
     }
