@@ -21,7 +21,7 @@ class SourceGuardTests(unittest.TestCase):
         self.assertLess(panel.index('reg(0x28);delay(10);'),panel.index('reg(0x01);delay(150)'))
         self.assertIn('reg(0x11);delay(150);',panel)
         self.assertIn('reg(0x29);delay(50);',panel)
-        self.assertLess(panel.index('fillScreen(0x0000);'),panel.index('reg(0x29);delay(15)'))
+        self.assertLess(panel.index('fillScreen(0x0000);'),panel.index('reg(0x29);delay(50)'))
         self.assertIn('panel.begin(displayMode);',firmware)
         self.assertNotIn('initialPanelBackground',firmware)
 
