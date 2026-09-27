@@ -3,7 +3,7 @@ using PixelPro2;
 static void Check(bool test){if(!test)throw new Exception("Assertion failed");}
 static void Reject(Action action){try{action();}catch(FormatException){return;}throw new Exception("Expected rejection");}
 
-Check(Protocol.CompatibleHello("PIXELPRO2|2.2.0|5|8|HX8357B|HID,CDC,MEDIA,MONITOR"));
+Check(Protocol.CompatibleHello("PIXELPRO2|2.2.1|5|8|HX8357B|HID,CDC,MEDIA,MONITOR"));
 Check(Protocol.CompatibleHello("PIXELPRO2|2.0.1|5|8|HX8357B|HID,CDC"));
 Check(!Protocol.CompatibleHello("PIXELPRO2|3.0.0|5|8|HX8357B|HID,CDC"));
 Check(!Protocol.CompatibleHello("PIXELPRO2|2.1.0|20|8|HX8357B|HID,CDC"));
