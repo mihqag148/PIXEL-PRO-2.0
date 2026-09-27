@@ -858,7 +858,7 @@ bool readMediaHeader(File& file) {
 }
 
 void startSaver(uint32_t now) {
-  if(!flashReady||!mediaFrame||calibrating||upload.active||mediaActive)return;
+  if(!flashReady||!mediaFrame||calibrating||upload.active||mediaActive||monitorActive||musicActive)return;
   mediaFile=SPIFFS.open("/screensaver.pxg",FILE_READ);
   if(!readMediaHeader(mediaFile)){if(mediaFile)mediaFile.close();return;}
   mediaIndex=0;
