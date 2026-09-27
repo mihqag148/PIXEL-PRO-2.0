@@ -5,6 +5,8 @@ namespace PixelPro2;
 
 public sealed class StudioForm : Form {
     sealed record ActionDef(string Name,string Type,string DefaultValue,string Hint,bool HidCapable);
+    sealed record KeyDrag(int Profile,int Key);
+    sealed record ProfileDrag(int Profile);
     sealed class StepItem {
         public Step Step { get; }
         public StepItem(Step step){Step=step;}
@@ -169,7 +171,8 @@ public sealed class StudioForm : Form {
             int p=i;
             var b=new Button{
                 Text=(i+1).ToString(),Dock=DockStyle.Fill,Margin=new Padding(3),
-                FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold)
+                FlatStyle=FlatStyle.Flat,Font=new Font("Segoe UI",10,FontStyle.Bold),
+                AllowDrop=true
             };
             b.Click+=(_,_)=>Guard(async()=>{
                 SaveEditor();
@@ -179,6 +182,17 @@ public sealed class StudioForm : Form {
                 RefreshProfileButtons();
                 if(device.Connected)await device.Request($"PROFILE|{p}");
             });
+            b.MouseDown+=(_,e)=>{
+                if(e.Button!=MouseButtons.Left)return;
+                try{SaveEditor();b.DoDragDrop(new ProfileDrag(p),DragDropEffects.Copy);}
+                catch(Exception ex){Log(ex.Message);}
+            };
+            b.DragEnter+=(_,e)=>{
+                if(e.Data?.GetDataPresent(typeof(ProfileDrag))==true)e.Effect=DragDropEffects.Copy;
+            };
+            b.DragDrop+=(_,e)=>{
+                if(e.Data?.GetData(typeof(ProfileDrag)) is ProfileDrag src&&src.Profile!=p)CopyProfile(src.Profile,p);
+            };
             profileButtons[i]=b;
             profiles.Controls.Add(b,i,0);
         }
@@ -191,11 +205,23 @@ public sealed class StudioForm : Form {
             int key=i;
             var b=new Button{
                 Dock=DockStyle.Fill,Margin=new Padding(5),FlatStyle=FlatStyle.Flat,
-                Font=new Font("Segoe UI",10,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter
+                Font=new Font("Segoe UI",10,FontStyle.Bold),TextAlign=ContentAlignment.MiddleCenter,
+                AllowDrop=true
             };
             b.Click+=(_,_)=>Guard(()=>{
                 SaveEditor();currentKey=key;LoadEditor();return Task.CompletedTask;
             });
+            b.MouseDown+=(_,e)=>{
+                if(e.Button!=MouseButtons.Left)return;
+                try{SaveEditor();b.DoDragDrop(new KeyDrag(currentProfile,key),DragDropEffects.Copy);}
+                catch(Exception ex){Log(ex.Message);}
+            };
+            b.DragEnter+=(_,e)=>{
+                if(e.Data?.GetDataPresent(typeof(KeyDrag))==true)e.Effect=DragDropEffects.Copy;
+            };
+            b.DragDrop+=(_,e)=>{
+                if(e.Data?.GetData(typeof(KeyDrag)) is KeyDrag src)CopyKey(src.Profile,src.Key,currentProfile,key);
+            };
             keyButtons[i]=b;
             grid.Controls.Add(b,i%4,i/4);
         }
@@ -318,6 +344,8 @@ public sealed class StudioForm : Form {
         save.Width=170;save.Height=36;save.BackColor=Color.FromArgb(40,160,90);save.ForeColor=Color.White;
         save.FlatStyle=FlatStyle.Flat;save.FlatAppearance.BorderSize=0;
         saveRow.Controls.Add(save);
+        saveRow.Controls.Add(MakeButton("SAVE PROFILE",UploadCurrentProfile));
+        saveRow.Controls.Add(MakeButton("SAVE KEY",UploadCurrentKey));
         saveRow.Controls.Add(MakeButton("Save Draft",()=>{SaveEditor();SaveLocal();return Task.CompletedTask;}));
         right.Controls.Add(saveRow,0,3);
 
@@ -518,6 +546,28 @@ public sealed class StudioForm : Form {
     }
 
     static Step CloneStep(Step s)=>new(){Type=s.Type,Value=s.Value};
+
+    static Binding CloneBinding(Binding b)=>new(){
+        Type=b.Type,Code=b.Code,Modifiers=b.Modifiers,Color=b.Color,Label=b.Label,
+        Steps=b.Steps?.Select(CloneStep).ToList()??[]
+    };
+
+    void CopyKey(int sourceProfile,int sourceKey,int targetProfile,int targetKey) {
+        if(sourceProfile==targetProfile&&sourceKey==targetKey)return;
+        preset.Profiles[targetProfile][targetKey]=CloneBinding(preset.Profiles[sourceProfile][sourceKey]);
+        if(targetProfile==currentProfile&&targetKey==currentKey)LoadEditor();
+        else RefreshTiles();
+        SaveLocalQuiet();
+        status.Text=$"Copied P{sourceProfile+1} K{sourceKey+1} → P{targetProfile+1} K{targetKey+1}";
+    }
+
+    void CopyProfile(int source,int target) {
+        if(source==target)return;
+        for(int k=0;k<8;k++)preset.Profiles[target][k]=CloneBinding(preset.Profiles[source][k]);
+        if(target==currentProfile)LoadEditor(); else RefreshTiles();
+        SaveLocalQuiet();
+        status.Text=$"Copied Profile {source+1} → Profile {target+1}";
+    }
 
     void AddAction(ActionDef action) {
         var item=new StepItem(new Step{Type=action.Type,Value=action.DefaultValue});
@@ -763,6 +813,37 @@ public sealed class StudioForm : Form {
         LoadEditor();LoadRulesGrid();SaveLocal();
         await RefreshMediaInfo();
         status.Text="Read 5 profiles from device";
+    }
+
+    async Task UploadBinding(int p,int k,IProgress<int>? progress=null) {
+        var b=preset.Profiles[p][k];
+        if(b.Type=="S") {
+            byte[] script=MediaCodec.FromNativeScript(b.Steps);
+            await device.UploadScript(p,k,script,progress,shutdown.Token);
+        }
+        await device.Request(b.Wire(p,k));
+    }
+
+    async Task UploadCurrentKey() {
+        NeedDevice();SaveEditor();SaveRulesGrid();preset.Validate();SaveLocal();
+        transfer.Value=0;
+        await UploadBinding(currentProfile,currentKey,new Progress<int>(v=>transfer.Value=Math.Clamp(v,0,100)));
+        await device.Request("SAVE");
+        transfer.Value=100;
+        status.Text=$"Saved P{currentProfile+1} K{currentKey+1}";
+    }
+
+    async Task UploadCurrentProfile() {
+        NeedDevice();SaveEditor();SaveRulesGrid();preset.Validate();SaveLocal();
+        transfer.Value=0;
+        for(int k=0;k<8;k++) {
+            int key=k;
+            await UploadBinding(currentProfile,k,new Progress<int>(v=>
+                transfer.Value=Math.Clamp((key*100+v)/(8),0,100)));
+        }
+        await device.Request("SAVE");
+        transfer.Value=100;
+        status.Text=$"Saved Profile {currentProfile+1}";
     }
 
     async Task UploadAll() {
