@@ -305,8 +305,16 @@ public sealed class StudioForm : Form {
         var menu=new ContextMenuStrip();
         menu.Items.Add("Connect",null,(_,_)=>Guard(ConnectSelected));
         menu.Items.Add("Refresh",null,(_,_)=>RefreshPorts());
-        menu.Items.Add("Read configuration",null,(_,_)=>Guard(ReadDevice));
-        menu.Items.Add("Sync configuration",null,(_,_)=>Guard(UploadAll));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Set RGB backlight",null,(_,_)=>Guard(ChooseDeviceBrightness));
+        menu.Items.Add("Sync configuration to device",null,(_,_)=>Guard(UploadAll));
+        menu.Items.Add("Read configuration to computer",null,(_,_)=>Guard(ReadDevice));
+        menu.Items.Add("Switch theme",null,(_,_)=>{dark=!dark;ApplyTheme(dark);});
+        menu.Items.Add("Upgrade firmware",null,(_,_)=>Guard(OpenFirmwarePage));
+        var pairing=menu.Items.Add("Clear pairing information");
+        pairing.Enabled=false;
+        pairing.ToolTipText="PIXEL PRO 2.0 is wired USB; there is no wireless pairing record.";
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Disconnect",null,(_,_)=>Guard(DisconnectDevice));
         deviceList.ContextMenuStrip=menu;
 
@@ -554,9 +562,7 @@ public sealed class StudioForm : Form {
         var rgbRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false};
         rgbRow.Controls.Add(new Label{Text="RGB brightness",AutoSize=true,Padding=new Padding(0,7,8,0)});
         rgbRow.Controls.Add(brightness);
-        rgbRow.Controls.Add(MakeButton("Apply RGB",async()=>{
-            NeedDevice();await device.Request($"RGB|{brightness.Value}");await device.Request("SAVE");
-        }));
+        rgbRow.Controls.Add(MakeButton("Apply RGB",ApplyBrightness));
         rgbRow.Controls.Add(MakeButton("Toggle PC Monitor",ToggleMonitor));
         flow.Controls.Add(rgbRow);
 
@@ -1193,6 +1199,37 @@ public sealed class StudioForm : Form {
     Task OpenFirmwarePage() {
         Process.Start(new ProcessStartInfo("https://github.com/mihqag148/PIXEL-PRO-2.0/releases/latest"){UseShellExecute=true});
         return Task.CompletedTask;
+    }
+
+    Task ChooseDeviceBrightness() {
+        NeedDevice();
+        using var dialog=new Form{
+            Text="RGB Backlight",Width=390,Height=170,
+            FormBorderStyle=FormBorderStyle.FixedDialog,
+            StartPosition=FormStartPosition.CenterParent,
+            MaximizeBox=false,MinimizeBox=false
+        };
+        var slider=new TrackBar{
+            Minimum=0,Maximum=80,Value=(int)brightness.Value,
+            TickFrequency=10,Width=330,Location=new Point(20,18)
+        };
+        var value=new Label{Text=slider.Value.ToString(),AutoSize=true,Location=new Point(170,75)};
+        slider.ValueChanged+=(_,_)=>value.Text=slider.Value.ToString();
+        var ok=new Button{Text="Apply",DialogResult=DialogResult.OK,Width=90,Location=new Point(140,95)};
+        dialog.Controls.Add(slider);dialog.Controls.Add(value);dialog.Controls.Add(ok);
+        dialog.AcceptButton=ok;
+        if(dialog.ShowDialog(this)==DialogResult.OK) {
+            brightness.Value=slider.Value;
+            return ApplyBrightness();
+        }
+        return Task.CompletedTask;
+    }
+
+    async Task ApplyBrightness() {
+        NeedDevice();
+        await device.Request($"RGB|{brightness.Value}");
+        await device.Request("SAVE");
+        status.Text=$"RGB brightness {brightness.Value}";
     }
 
     Task ChooseKeyColor() {
