@@ -5,7 +5,7 @@
 namespace Pixel {
 constexpr int Profiles=5, Keys=8;
 struct Binding {
-  char type; // K keyboard usage, C consumer usage, H host action, P profile, D disabled
+  char type; // K keyboard, C consumer, M mouse, H host action, P profile, D disabled
   uint16_t code;
   uint8_t modifiers;
   uint16_t color;
@@ -28,6 +28,7 @@ inline bool valid(const Binding& b) {
   switch(b.type) {
     case 'K': return b.code>=4 && b.code<=115;
     case 'C': return !b.modifiers && (b.code==0xE9||b.code==0xEA||b.code==0xE2||b.code==0xCD||b.code==0xB5||b.code==0xB6||b.code==0xB7);
+    case 'M': return !b.modifiers && b.code>=1 && b.code<=6;
     case 'H': return b.code==0 && !b.modifiers;
     case 'P': return b.code<Profiles && !b.modifiers;
     case 'D': return b.code==0 && !b.modifiers;
