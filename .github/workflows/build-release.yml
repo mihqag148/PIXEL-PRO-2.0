@@ -68,9 +68,15 @@ jobs:
         run: dotnet run --project tests/UiSmoke/UiSmoke.csproj -c Release -- studio-preview.png
       - name: Publish self-contained Windows Studio
         run: dotnet publish app/PixelPro2/PixelPro2.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -o dist/studio
+      - name: Publish PC Monitor plugin
+        run: dotnet publish app/PixelPro2.PcMonitorPlugin/PixelPro2.PcMonitorPlugin.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:DebugType=None -o dist/plugin-pc
+      - name: Publish Music plugin
+        run: dotnet publish app/PixelPro2.MusicPlugin/PixelPro2.MusicPlugin.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o dist/plugin-music
       - name: Package app
         shell: pwsh
         run: |
+          Copy-Item dist/plugin-pc/PixelPro2.PcMonitorPlugin.exe dist/studio/
+          Copy-Item dist/plugin-music/PixelPro2.MusicPlugin.exe dist/studio/
           Copy-Item docs/STUDIO.md,THIRD_PARTY.md dist/studio
           Compress-Archive -Path dist/studio/* -DestinationPath dist/PIXEL-PRO-2.0-Studio-win-x64.zip
       - uses: actions/upload-artifact@v4
