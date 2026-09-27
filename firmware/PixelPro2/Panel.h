@@ -47,14 +47,14 @@ public:
 
   void begin(uint8_t mode) {
     restore();
-    // Keep the panel blank throughout init. HX8357-B only needs a short delay
-    // after software reset and >=120 ms after Sleep Out.
-    reg(0x28);delay(5);
-    reg(0xB0,{0,0});reg(0x01);delay(15);reg(0x28);
-    reg(0x3A,{0x55});delay(1);reg(0x11);delay(120);
+    // Use the proven v2.2.1 timing. Some physical HX8357-B panels remain in
+    // a grey/undefined GRAM state when reset/sleep-out delays are shortened.
+    reg(0x28);delay(10);
+    reg(0xB0,{0,0});reg(0x01);delay(150);reg(0x28);
+    reg(0x3A,{0x55});delay(1);reg(0x11);delay(150);
     orientation(mode);reg(0x21);
     fillScreen(0x0000);
-    reg(0x29);delay(15);setTextWrap(false);
+    reg(0x29);delay(50);setTextWrap(false);
   }
 
   void drawPixel(int16_t x,int16_t y,uint16_t c) override{fillRect(x,y,1,1,c);}
