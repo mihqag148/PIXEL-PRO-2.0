@@ -68,6 +68,11 @@ uint16_t mediaW=0,mediaH=0,mediaFrames=0,mediaDelay=100,mediaIndex=0;
 bool mediaActive=false;
 uint32_t mediaNext=0;
 
+// Full-screen PC monitor
+bool monitorActive=false;
+uint8_t monitorCpu=0,monitorGpu=0,monitorRam=0,monitorDisk=0;
+uint16_t monitorNet=0;
+
 void defaults() {
   memset(&config,0,sizeof(config));
   config.magic=0x50583201;
@@ -313,8 +318,47 @@ bool drawKeyIcon(uint8_t p,uint8_t k,int16_t x,int16_t y) {
   return true;
 }
 
+void drawMonitorMetric(const char* name,uint8_t value,int y,uint16_t color) {
+  panel.setTextColor(0xFFFF);
+  panel.setTextSize(2);
+  panel.setCursor(24,y);
+  panel.print(name);
+  panel.setCursor(365,y);
+  panel.print(value);
+  panel.print("%");
+  panel.drawRect(120,y+2,220,18,0x7BEF);
+  panel.fillRect(122,y+4,216,14,0x1082);
+  int w=int(value)*212/100;
+  if(w>0)panel.fillRect(124,y+5,w,12,color);
+}
+
+void drawMonitorScreen() {
+  panel.fillScreen(0x0843);
+  panel.setTextColor(0xFFFF);
+  panel.setTextSize(3);
+  panel.setCursor(22,18);
+  panel.print("PC MONITOR");
+  panel.setTextSize(1);
+  panel.setCursor(365,28);
+  panel.print("PIXEL PRO 2.0");
+  drawMonitorMetric("CPU",monitorCpu,72,0x07E0);
+  drawMonitorMetric("GPU",monitorGpu,116,0xF81F);
+  drawMonitorMetric("RAM",monitorRam,160,0x07FF);
+  drawMonitorMetric("DISK",monitorDisk,204,0xFFE0);
+  panel.setTextSize(2);
+  panel.setTextColor(0xFFFF);
+  panel.setCursor(24,254);
+  panel.print("NET");
+  panel.setCursor(120,254);
+  panel.print(monitorNet);
+  panel.print(" kbps");
+  panel.setTextSize(1);
+  panel.setCursor(24,295);
+  panel.print("Keys/HID remain active  |  PC Monitor from Studio");
+}
+
 void render() {
-  if(mediaActive||calibrating)return;
+  if(mediaActive||calibrating||monitorActive)return;
   if(displayDirty) {
     panel.fillScreen(0x0843);
     panel.setTextSize(2);
@@ -466,7 +510,7 @@ void request(char* line) {
   uint32_t p=0,k=0,v=0,m=0,color=0;
 
   if(cmd=="HELLO"&&n==2) {
-    ok("PIXELPRO2|2.1.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON");
+    ok("PIXELPRO2|2.1.0|5|8|HX8357B|HID,CDC,RGB,TOUCH,TOUCHCAL,SD,PANEL,MEDIA,SAVER,ICON,MONITOR");
     return;
   }
   if(cmd=="PANEL"&&n==2){ok(String(displayMode));return;}
@@ -485,6 +529,25 @@ void request(char* line) {
     if(prefs.putUShort("saver",v)!=2){error("STORAGE");return;}
     saverSeconds=v;
     ok("SAVER");return;
+  }
+  if(cmd=="MONITOR"&&n==3&&strcmp(tokens[2],"OFF")==0) {
+    monitorActive=false;
+    displayDirty=true;
+    dirtyTiles=255;
+    ok("OFF");
+    return;
+  }
+  if(cmd=="MONITOR"&&n==8&&strcmp(tokens[2],"SET")==0&&
+     Pixel::number(tokens[3],100,p)&&Pixel::number(tokens[4],100,k)&&
+     Pixel::number(tokens[5],100,v)&&Pixel::number(tokens[6],100,m)&&
+     Pixel::number(tokens[7],9999,color)) {
+    if(calibrating||upload.active){error("BUSY");return;}
+    stopSaver();
+    monitorCpu=p;monitorGpu=k;monitorRam=v;monitorDisk=m;monitorNet=color;
+    monitorActive=true;
+    drawMonitorScreen();
+    ok("MONITOR");
+    return;
   }
   if(cmd=="PROFILE"&&n==3&&Pixel::number(tokens[2],4,p)) {
     selectProfile(p);ok("PROFILE");return;
@@ -518,6 +581,7 @@ void request(char* line) {
     return;
   }
   if(cmd=="TOUCHCAL"&&n==3&&strcmp(tokens[2],"START")==0) {
+    monitorActive=false;
     stopSaver();
     calibrating=true;
     calPoint=0;
