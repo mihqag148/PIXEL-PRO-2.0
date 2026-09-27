@@ -76,7 +76,16 @@ public static class UiText {
         ["Always On"]=("Luôn bật","始终开启"),
         ["30 seconds"]=("30 giây","30 秒"),
         ["5 minutes"]=("5 phút","5 分钟"),
-        ["15 minutes"]=("15 phút","15 分钟")
+        ["15 minutes"]=("15 phút","15 分钟"),
+        ["Safe Mode"]=("Chế độ an toàn","安全模式"),
+        ["Safe Mode (USB mass storage hidden)"]=("Safe Mode (ẩn USB lưu trữ)","安全模式（隐藏 USB 存储）"),
+        ["Open Presets Folder"]=("Mở thư mục Preset","打开预设文件夹"),
+        ["Open Community Gallery"]=("Mở Gallery cộng đồng","打开社区预设库"),
+        ["Import Downloaded"]=("Nhập preset đã tải","导入已下载预设"),
+        ["Filter Duplicated"]=("Lọc trùng lặp","过滤重复"),
+        ["Search presets..."]=("Tìm preset...","搜索预设..."),
+        ["Add Preset"]=("Thêm Preset","添加预设"),
+        ["Local"]=("Cục bộ","本地")
     };
 
     static readonly Dictionary<string,(string vi,string zh)> ActionMap=new(StringComparer.Ordinal) {
