@@ -80,7 +80,7 @@ public sealed class MainForm : Form {
         orientation.Items.AddRange(new object[]{
             "Hướng gốc","Xoay 180°","Lật ngang","180° + lật ngang"
         });
-        orientation.SelectedIndex=1;
+        orientation.SelectedIndex=0;
         controls.Controls.Add(orientation);
         Button(controls,"Áp dụng hướng",async()=>{
             await device.Request($"DISPLAY|{orientation.SelectedIndex}");
