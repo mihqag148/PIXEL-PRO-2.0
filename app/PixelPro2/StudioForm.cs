@@ -921,6 +921,34 @@ public sealed class StudioForm : Form {
         return Task.CompletedTask;
     }
 
+    Task ImportProfile() {
+        SaveEditor();
+        using var dialog=new OpenFileDialog{Filter="PIXEL PRO profile|*.profile.json;*.json"};
+        if(dialog.ShowDialog()==DialogResult.OK) {
+            var document=ProfilePreset.Load(dialog.FileName);
+            for(int k=0;k<DeviceLimits.Keys;k++)
+                preset.Profiles[currentProfile][k]=CloneBinding(document.Keys[k]);
+            currentKey=0;
+            LoadEditor();
+            SaveLocal();
+            status.Text=$"Imported Profile {currentProfile+1} · not synced yet";
+        }
+        return Task.CompletedTask;
+    }
+
+    Task ExportProfile() {
+        SaveEditor();
+        var document=new ProfilePreset {
+            Keys=preset.Profiles[currentProfile].Select(CloneBinding).ToArray()
+        };
+        using var dialog=new SaveFileDialog{
+            Filter="PIXEL PRO profile|*.profile.json",
+            FileName=$"pixel-pro-2-profile-{currentProfile+1}.profile.json"
+        };
+        if(dialog.ShowDialog()==DialogResult.OK)document.Save(dialog.FileName);
+        return Task.CompletedTask;
+    }
+
     Task OpenFirmwarePage() {
         Process.Start(new ProcessStartInfo("https://github.com/mihqag148/PIXEL-PRO-2.0/releases/latest"){UseShellExecute=true});
         return Task.CompletedTask;
