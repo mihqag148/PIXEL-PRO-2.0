@@ -1,63 +1,116 @@
-# Studio Windows 2.2.1
+# Studio Windows 2.3
 
-Studio 2.2 is the desktop configurator/background host for PIXEL PRO 2.0.
+Studio 2.3 reorganizes PIXEL PRO 2.0 around the same workflow style users expect from modern Stream-Deck/macropad configurators: choose a profile/key, build an ordered action sequence, choose HID Mode or App Mode, then save only the key/profile or synchronize the entire device.
 
-## Kết nối
+## Layout / UX
 
-- **Tự tìm phím** quét các COM hiện có, mở từng cổng với **DTR trước rồi RTS**, retry HELLO và chỉ giữ cổng trả về đúng `PIXELPRO2`.
-- Firmware tắt native-USBCDC reboot-by-line-state để việc mở/đóng Studio không đá ESP32-S2 vào bootloader.
-- Có thể chọn COM thủ công bằng **Kết nối**.
-- Mất COM sẽ tắt quyền chạy macro host và ghi lỗi vào log.
+Left pane:
 
-## PC Monitor fullscreen
+- **Profile & Key Selection**: 5 profiles × 8 keys.
+- Drag one key onto another to copy its binding/action sequence.
+- Drag one profile onto another to copy all 8 bindings/action sequences.
+- Key icon upload/delete and per-key RGB color.
+- **Device List** with Refresh, Auto Find, Connect, Disconnect, Read and Sync / Save.
 
-**PC Monitor** chuyển LCD sang trang giám sát toàn màn hình và cập nhật mỗi giây qua CDC. Studio dùng LibreHardwareMonitor 0.9.6 để đọc CPU/GPU load + nhiệt độ khi sensor có sẵn; RAM, disk và network có fallback bằng Windows/.NET API. Phím HID, media key và host macro vẫn hoạt động trong lúc trang monitor hiển thị.
+Right pane:
 
-Nhấn **PC Monitor** lần nữa để gửi `MONITOR|OFF` và quay lại giao diện phím. Mất COM sẽ tự tắt monitor ở Studio. Sensor không đọc được sẽ hiện 0% hoặc `--C` thay vì làm app lỗi.
+- **Key Configuration**: draggable Action toolbox + ordered Action Sequence.
+- **Display & Media**: LCD orientation, touch calibration, GIF, RGB, PC Monitor and auto screen-off.
+- **Auto Profile**: map foreground Windows process names to profiles.
+- **Log**: CDC/device/macro diagnostics.
 
-## Keymap / profile
+Header provides Import, Export, Firmware Releases and Light/Dark mode.
 
-- 5 profile × 8 key.
-- K = keyboard HID; C = media HID; H = macro chạy qua Studio; P = chuyển profile; D = disabled.
-- Nhãn tối đa 12 ASCII, RGB565 từng phím, brightness 0…80.
-- **Đọc thiết bị** đọc đủ 40 binding.
-- **Gửi & lưu** gửi đủ 40 binding + RGB + saver timeout, sau đó SAVE.
-- Preset JSON schema 2 lưu tại file tùy chọn và bản nháp local `%LOCALAPPDATA%\PixelPro2\preset.json`.
+## Action toolbox
 
-## Macro host
+Studio 2.3 exposes separate actions instead of requiring users to manually type macro syntax:
 
-Mỗi dòng là một step:
+- Access Website
+- Launch APP
+- Open Folder
+- Open File
+- Input Text
+- Shortcut
+- Wait
+- Mouse Move
+- Mouse Click
+- Mouse Wheel
+- Media Control
+- Change Profile
+- Functional Key
+- Device Control
 
-```text
-Open|C:\Tools\app.exe
-Delay|500
-Shortcut|CTRL+SHIFT+S
-Text|hello
-MouseMove|20,-10
-MouseClick|LEFT
-Wheel|-120
-KeyDown|CTRL
-KeyUp|CTRL
-```
+Actions can be dragged/double-clicked into the sequence and reordered/deleted. A key supports up to **512 actions**.
 
-Supported: Text, Shortcut, Open (URL/app/file/folder), Delay 0…30000ms, MouseMove, MouseClick LEFT/RIGHT/MIDDLE/DOUBLELEFT, Wheel, KeyDown, KeyUp. Tối đa 64 step. Held keys are released in `finally` if a macro is interrupted.
+## HID Mode vs App Mode
 
-H actions require Studio running and **Cho phép macro trên PC này** enabled. K/C actions remain native HID and do not need Studio.
+**HID Mode** runs without Studio when every action in the sequence can be encoded by the device:
+
+- Text
+- Shortcut / Functional Key
+- Wait
+- Mouse Click
+- Mouse Wheel
+- Media Control
+- Change Profile
+- Profile Next / Previous
+
+Simple one-action keys are stored directly as native keyboard/media/mouse/profile bindings. Longer HID sequences are compiled by Studio into a **PXS2** native script and stored in SPIFFS.
+
+**App Mode** requires Studio running and is used for Windows-side actions such as:
+
+- Website / launch app / open file / open folder
+- Mouse Move
+- PC Monitor toggle
+- other host-only sequences
+
+The physical device still remains a normal HID keyboard/media/mouse device.
+
+## Save scope
+
+- **SAVE KEY**: send only the selected key (plus its PXS2 script if needed).
+- **SAVE PROFILE**: send the selected profile.
+- **SAVE TO DEVICE**: synchronize all 5 × 8 keys plus RGB, screensaver timeout and display sleep setting.
+- **Save Draft**: save the local schema-3 preset only.
+
+## Dynamic / Auto Profile
+
+The Auto Profile tab can bind a Windows foreground process name to Profile 1…5. **Add current app** captures the currently active process. When enabled and PIXEL PRO is connected, Studio checks the foreground process and switches the device profile when a matching rule becomes active.
 
 ## Touch
 
-**Calibrate touch** starts an on-device four-point wizard. Touch the crosshairs in this order: top-left, top-right, bottom-right, bottom-left. Firmware validates spans, stores raw endpoints in NVS, restores current orientation and applies the same transform to touch coordinates.
+Touch calibration is still four points: top-left → top-right → bottom-right → bottom-left.
 
-## GIF screensaver
+v2.3 changes the physical sampling path:
 
-**Tải GIF** decodes on the PC, scales to 160×106 RGB332 and downsamples frame count only if necessary to stay under the flash budget. Transfer uses 512-byte cumulative ACK + CRC32. Firmware stores `/screensaver.pxg` and scales each RGB332 frame 3× to the 480×320 panel without a full-size framebuffer.
+- median-of-5 ADC samples,
+- 8 ms scan interval,
+- lower valid pressure threshold,
+- calibration maps the raw calibration values back to the actual on-screen target coordinates (24…455 / 24…295) rather than incorrectly treating them as the panel edges,
+- touch debug events include x, y and pressure.
 
-**Saver(s)** controls idle time; 0 disables the saver. Key/touch/encoder/host activity exits the saver.
+## Faster boot
 
-## Icon phím
+A full merged flash leaves the SPIFFS partition blank. Older builds used `SPIFFS.begin(true)` during setup, which could format the filesystem before the UI became usable. v2.3:
 
-Select a profile and K1…K8, then choose **Tải icon phím**. PNG/JPG/BMP/GIF are fitted into a 48×48 RGB332 icon and uploaded with the same ACK/CRC transport. Icons are stored in flash per profile/key and render directly in the physical key tile. **Xóa icon phím** restores the text-only tile.
+- renders the UI before optional storage work,
+- mounts SPIFFS without auto-format at boot,
+- formats only on the first upload if needed,
+- probes optional SD only when requested,
+- shortens HX8357-B startup waits while retaining the required Sleep-Out delay.
 
-## Display
+## Display / Media
 
-Orientation 0…3 is persisted separately from keymap. Bản 2.2.1 dùng gốc landscape đã hiệu chỉnh cho panel thực tế (`0x68`) và bỏ giá trị orientation cũ của 2.2.0 trong lần migrate đầu. RGB, touch, media và key icons dùng cùng transform.
+- GIF screensaver: 160×106 RGB332 streamed 3× to the 480×320 panel.
+- 48×48 per-key RGB332 icons.
+- Full-screen PC Monitor.
+- Auto screen-off: **Always On / 30 seconds / 5 minutes / 15 minutes**. HID stays active and key/touch/roller activity wakes the LCD.
+- Orientation 0…3 uses the calibrated landscape base MADCTL `0x68`.
+
+## Connection
+
+Studio opens native USB CDC by asserting DTR first and RTS second. Firmware disables Arduino-ESP32 CDC reboot sequencing and owns CDC interface 0 through its explicit `USBCDC usbLink`.
+
+## Current parity boundary
+
+Studio 2.3 intentionally moves much closer to the public eezbotfun workflow, but it is not claimed as a byte-for-byte or feature-for-feature clone. Features not implemented in this release include simultaneous multi-device sessions, their community preset gallery, integrated SMTC Now Playing/album-art plugin, their custom `cus` display protocol and ESP-NOW wireless mode. PIXEL PRO 2.0 retains its own protocol and hardware-specific implementation.
