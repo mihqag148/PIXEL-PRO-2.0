@@ -3,9 +3,6 @@ using Windows.Media.Control;
 
 namespace PixelPro2;
 
-public readonly record struct NowPlayingSnapshot(
-    string Title,string Artist,string Album,string Source,bool Playing);
-
 public sealed class MusicPlugin : IDisposable {
     GlobalSystemMediaTransportControlsSessionManager? manager;
     bool failed;
