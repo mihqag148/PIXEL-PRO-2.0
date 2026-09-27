@@ -1,0 +1,104 @@
+namespace PixelPro2;
+
+public static class UiText {
+    static readonly Dictionary<string,(string vi,string zh)> Map=new(StringComparer.Ordinal) {
+        ["Getting Started"]=("Bắt đầu","快速开始"),
+        ["Key Configuration"]=("Cấu hình phím","按键配置"),
+        ["Plugins"]=("Plugin","插件"),
+        ["Display & Media"]=("Màn hình & Media","显示与媒体"),
+        ["Auto Profile"]=("Tự động Profile","自动配置"),
+        ["Log"]=("Nhật ký","日志"),
+        ["Import"]=("Nhập","导入"),
+        ["Export"]=("Xuất","导出"),
+        ["Import Profile"]=("Nhập Profile","导入配置"),
+        ["Export Profile"]=("Xuất Profile","导出配置"),
+        ["Presets"]=("Mẫu có sẵn","预设"),
+        ["Firmware"]=("Firmware","固件"),
+        ["Light / Dark"]=("Sáng / Tối","亮色 / 暗色"),
+        ["Profile & Key Selection"]=("Chọn Profile & Phím","配置与按键选择"),
+        ["Device List"]=("Danh sách thiết bị","设备列表"),
+        ["Refresh"]=("Làm mới","刷新"),
+        ["Auto Find"]=("Tự tìm","自动查找"),
+        ["Connect"]=("Kết nối","连接"),
+        ["Disconnect"]=("Ngắt kết nối","断开"),
+        ["Read"]=("Đọc","读取"),
+        ["Sync / Save"]=("Đồng bộ / Lưu","同步 / 保存"),
+        ["Upload Icon"]=("Tải icon","上传图标"),
+        ["Delete Icon"]=("Xóa icon","删除图标"),
+        ["Key Color"]=("Màu phím","按键颜色"),
+        ["Selected Key"]=("Phím đang chọn","当前按键"),
+        ["Display name"]=("Tên hiển thị","显示名称"),
+        ["HID Mode · runs without Studio"]=("HID Mode · chạy không cần Studio","HID 模式 · 无需 Studio"),
+        ["Allow App-mode actions on this PC"]=("Cho phép App Mode trên PC này","允许此电脑运行应用模式"),
+        ["Action Sequence"]=("Chuỗi hành động","动作序列"),
+        ["Action Parameters"]=("Tham số hành động","动作参数"),
+        ["Value"]=("Giá trị","参数"),
+        ["Browse…"]=("Chọn…","浏览…"),
+        ["↑ Up"]=("↑ Lên","↑ 上移"),
+        ["↓ Down"]=("↓ Xuống","↓ 下移"),
+        ["Delete"]=("Xóa","删除"),
+        ["SAVE TO DEVICE"]=("LƯU VÀO THIẾT BỊ","保存到设备"),
+        ["SAVE PROFILE"]=("LƯU PROFILE","保存配置"),
+        ["SAVE KEY"]=("LƯU PHÍM","保存按键"),
+        ["Save Draft"]=("Lưu bản nháp","保存草稿"),
+        ["Actions"]=("Hành động","动作"),
+        ["Integrated Plugins"]=("Plugin tích hợp","集成插件"),
+        ["PC Monitoring"]=("Giám sát PC","电脑监控"),
+        ["PC Monitoring Plugin"]=("Plugin giám sát PC","电脑监控插件"),
+        ["Music Player"]=("Trình phát nhạc","音乐播放器"),
+        ["Music Player Plugin (SMTC)"]=("Plugin nhạc (SMTC)","音乐插件 (SMTC)"),
+        ["LCD orientation"]=("Hướng LCD","LCD 方向"),
+        ["Apply"]=("Áp dụng","应用"),
+        ["Calibrate Touch"]=("Cân chỉnh cảm ứng","触摸校准"),
+        ["Reset Touch"]=("Reset cảm ứng","重置触摸"),
+        ["Touch Diagnostics"]=("Chẩn đoán cảm ứng","触摸诊断"),
+        ["Screensaver after (s)"]=("Bảo vệ màn hình sau (s)","屏保延时 (秒)"),
+        ["Save timeout"]=("Lưu thời gian","保存时间"),
+        ["Upload GIF"]=("Tải GIF","上传 GIF"),
+        ["Delete GIF"]=("Xóa GIF","删除 GIF"),
+        ["Auto screen off"]=("Tự tắt màn hình","自动息屏"),
+        ["RGB brightness"]=("Độ sáng RGB","RGB 亮度"),
+        ["Apply RGB"]=("Áp dụng RGB","应用 RGB"),
+        ["Toggle PC Monitor"]=("Bật/tắt PC Monitor","切换电脑监控"),
+        ["Enable dynamic profile switching"]=("Bật tự đổi profile","启用自动配置切换"),
+        ["Add current app"]=("Thêm app hiện tại","添加当前应用"),
+        ["Add row"]=("Thêm dòng","添加"),
+        ["Delete row"]=("Xóa dòng","删除"),
+        ["Save rules"]=("Lưu quy tắc","保存规则"),
+        ["Auto Find Device"]=("Tự tìm thiết bị","自动查找设备"),
+        ["Read Device"]=("Đọc thiết bị","读取设备"),
+        ["Sync To Device"]=("Đồng bộ xuống thiết bị","同步到设备"),
+        ["Always On"]=("Luôn bật","始终开启"),
+        ["30 seconds"]=("30 giây","30 秒"),
+        ["5 minutes"]=("5 phút","5 分钟"),
+        ["15 minutes"]=("15 phút","15 分钟")
+    };
+
+    static readonly Dictionary<string,(string vi,string zh)> ActionMap=new(StringComparer.Ordinal) {
+        ["Website"]=("Mở Website","访问网站"),
+        ["LaunchApp"]=("Chạy APP","启动应用"),
+        ["OpenFolder"]=("Mở thư mục","打开文件夹"),
+        ["OpenFile"]=("Mở tệp","打开文件"),
+        ["Text"]=("Nhập văn bản","输入文本"),
+        ["Shortcut"]=("Phím tắt","快捷键"),
+        ["Delay"]=("Chờ","等待"),
+        ["MouseMove"]=("Di chuyển chuột","移动鼠标"),
+        ["MouseClick"]=("Nhấp chuột","鼠标点击"),
+        ["Wheel"]=("Con lăn chuột","鼠标滚轮"),
+        ["Media"]=("Điều khiển media","媒体控制"),
+        ["ChangeProfile"]=("Đổi Profile","切换配置"),
+        ["FunctionalKey"]=("Phím chức năng","功能键"),
+        ["DeviceCtrl"]=("Điều khiển thiết bị","设备控制"),
+        ["PowerOff"]=("Tắt máy tính","关闭电脑")
+    };
+
+    public static string Translate(string english,string code) {
+        if(code=="en"||!Map.TryGetValue(english,out var value))return english;
+        return code=="vi"?value.vi:value.zh;
+    }
+
+    public static string ActionName(string type,string fallback,string code) {
+        if(code=="en"||!ActionMap.TryGetValue(type,out var value))return fallback;
+        return code=="vi"?value.vi:value.zh;
+    }
+}
