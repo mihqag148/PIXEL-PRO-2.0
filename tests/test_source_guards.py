@@ -54,7 +54,7 @@ class SourceGuardTests(unittest.TestCase):
         model=(ROOT/'firmware/PixelPro2/Model.h').read_text()
         self.assertIn('Profiles=25',model)
         self.assertIn('LegacyConfiguration5',firmware)
-        self.assertIn('PIXELPRO2|2.4.0|25|8|HX8357B',firmware)
+        self.assertIn('PIXELPRO2|2.5.0|25|8|HX8357B',firmware)
         self.assertIn('profileBank=(profile/5)*5',firmware)
         self.assertIn('Pixel::number(tokens[2],Pixel::Profiles-1,p)',firmware)
 
