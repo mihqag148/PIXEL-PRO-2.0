@@ -1,10 +1,10 @@
-# PIXELPRO2 CDC protocol 2.2
+# PIXELPRO2 CDC protocol 2.2.1
 
-Control channel uses ASCII newline framing. Host sends `id|COMMAND|...`; firmware replies `R|id|OK|payload` or `R|id|ERR|reason`. Asynchronous events begin with `E|`. Studio 2.2 asserts both DTR and RTS because Arduino-ESP32 native USBCDC marks the port connected only in that line state; firmware disables USBCDC reboot sequencing so this does not trigger bootloader reset.
+Control channel uses ASCII newline framing. Host sends `id|COMMAND|...`; firmware replies `R|id|OK|payload` or `R|id|ERR|reason`. Asynchronous events begin with `E|`. Studio 2.2.1 asserts DTR first, then RTS. Firmware disables USBCDC reboot sequencing and does not gate protocol replies on `USBCDC::operator bool()`; the underlying TinyUSB write path decides whether the CDC endpoint is actually connected.
 
 | Request | Payload |
 |---|---|
-| HELLO | `PIXELPRO2|2.2.0|5|8|HX8357B|caps` |
+| HELLO | `PIXELPRO2|2.2.1|5|8|HX8357B|caps` |
 | STATE | active profile, brightness, saver seconds |
 | GET\|p\|k | type, code, modifiers, RGB565, label |
 | SET\|p\|k\|type\|code\|modifiers\|color\|label | SET |
