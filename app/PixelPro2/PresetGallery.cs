@@ -3,6 +3,19 @@ namespace PixelPro2;
 public sealed record BuiltInPreset(string Name,string Category,string Description,ProfilePreset Profile);
 
 public static class PresetGallery {
+    public static string PresetsFolder=>Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PixelPro2","presets");
+
+    public static void EnsureFolder()=>Directory.CreateDirectory(PresetsFolder);
+
+    public static IEnumerable<(string Name,string Path)> LocalFiles() {
+        EnsureFolder();
+        return Directory.EnumerateFiles(PresetsFolder,"*.json",SearchOption.TopDirectoryOnly)
+            .Select(path=>(Path.GetFileNameWithoutExtension(path),path))
+            .OrderBy(x=>x.Item1,StringComparer.OrdinalIgnoreCase);
+    }
+
     static Binding Key(string label,string shortcut)=>new(){
         Type="K",Code=HidShortcut.TryParse(shortcut,out int usage,out int mods)?usage:4,
         Modifiers=mods,Label=label,Color=1215,
@@ -69,13 +82,22 @@ public sealed class PresetGalleryForm : Form {
         var tools=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
         tools.Controls.Add(search);
         category.Items.Add("All");
+        category.Items.Add("Local");
         foreach(var c in PresetGallery.BuiltIns.Select(x=>x.Category).Distinct().Order())
             category.Items.Add(c);
         category.SelectedIndex=0;
         tools.Controls.Add(category);
         tools.Controls.Add(filterDuplicates);
 
-        var online=new Button{Text="Open Online Gallery",AutoSize=true,Height=30};
+        var folder=new Button{Text="Open Presets Folder",AutoSize=true,Height=30};
+        folder.Click+=(_,_)=>{
+            PresetGallery.EnsureFolder();
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                PresetGallery.PresetsFolder){UseShellExecute=true});
+        };
+        tools.Controls.Add(folder);
+
+        var online=new Button{Text="Open Community Gallery",AutoSize=true,Height=30};
         online.Click+=(_,_)=>System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
             "https://www.eezbotfun.com/en/files"){UseShellExecute=true});
         tools.Controls.Add(online);
@@ -83,7 +105,13 @@ public sealed class PresetGalleryForm : Form {
         var import=new Button{Text="Import Downloaded",AutoSize=true,Height=30};
         import.Click+=(_,_)=>{
             using var dialog=new OpenFileDialog{Filter="PIXEL PRO profile|*.profile.json;*.json"};
-            if(dialog.ShowDialog()==DialogResult.OK){apply(ProfilePreset.Load(dialog.FileName));DialogResult=DialogResult.OK;}
+            if(dialog.ShowDialog()==DialogResult.OK){
+                PresetGallery.EnsureFolder();
+                string target=Path.Combine(PresetGallery.PresetsFolder,Path.GetFileName(dialog.FileName));
+                if(!string.Equals(Path.GetFullPath(dialog.FileName),Path.GetFullPath(target),StringComparison.OrdinalIgnoreCase))
+                    File.Copy(dialog.FileName,target,true);
+                apply(ProfilePreset.Load(target));DialogResult=DialogResult.OK;
+            }
         };
         tools.Controls.Add(import);
 
@@ -109,6 +137,20 @@ public sealed class PresetGalleryForm : Form {
             x.Category.Contains(q,StringComparison.OrdinalIgnoreCase)||
             x.Description.Contains(q,StringComparison.OrdinalIgnoreCase));
         if(filterDuplicates.Checked)items=items.GroupBy(x=>x.Name,StringComparer.OrdinalIgnoreCase).Select(x=>x.First());
+
+        foreach(var local in PresetGallery.LocalFiles()) {
+            if(q.Length>0&&!local.Name.Contains(q,StringComparison.OrdinalIgnoreCase))continue;
+            if(cat!="All"&&cat!="Local")continue;
+            var localCard=new Panel{Width=250,Height=128,Margin=new Padding(8),BorderStyle=BorderStyle.FixedSingle,Padding=new Padding(10)};
+            localCard.Controls.Add(new Label{Text=local.Name,AutoSize=true,Font=new Font("Segoe UI",11,FontStyle.Bold),Location=new Point(10,10)});
+            localCard.Controls.Add(new Label{Text="Local",AutoSize=true,ForeColor=Color.DimGray,Location=new Point(10,36)});
+            localCard.Controls.Add(new Label{Text="AppData preset",AutoSize=false,Size=new Size(225,34),Location=new Point(10,58)});
+            var useLocal=new Button{Text="Add Preset",Width=100,Height=27,Location=new Point(138,94)};
+            string localPath=local.Path;
+            useLocal.Click+=(_,_)=>{apply(ProfilePreset.Load(localPath));DialogResult=DialogResult.OK;};
+            localCard.Controls.Add(useLocal);
+            cards.Controls.Add(localCard);
+        }
 
         foreach(var preset in items) {
             var card=new Panel{Width=250,Height=128,Margin=new Padding(8),BorderStyle=BorderStyle.FixedSingle,Padding=new Padding(10)};
