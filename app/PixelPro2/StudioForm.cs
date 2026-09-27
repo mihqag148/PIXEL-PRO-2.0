@@ -112,7 +112,7 @@ public sealed class StudioForm : Form {
         "PixelPro2","language.txt");
 
     public StudioForm() {
-        Text="PIXEL PRO 2.0 · Studio 2.4";
+        Text="PIXEL PRO 2.0 · Studio 2.5";
         MinimumSize=new Size(1180,860);
         Size=new Size(1360,940);
         StartPosition=FormStartPosition.CenterScreen;
@@ -615,7 +615,7 @@ public sealed class StudioForm : Form {
 
         var note=new Label{
             AutoSize=true,MaximumSize=new Size(820,0),Padding=new Padding(0,12,0,0),
-            Text="Touch 2.4: raw axes follow the actual MCUFRIEND wiring (screen X comes from rawY, screen Y from rawX). Calibration uses a 4-point affine solve that handles axis swap, inversion and panel skew. Hold each target briefly, then release before touching the next one."
+            Text="Touch affine: raw axes follow the actual MCUFRIEND wiring (screen X comes from rawY, screen Y from rawX). Calibration uses a 4-point affine solve that handles axis swap, inversion and panel skew. Hold each target briefly, then release before touching the next one."
         };
         flow.Controls.Add(note);
         return flow;
@@ -1460,7 +1460,7 @@ public sealed class StudioForm : Form {
         status.Text="Hold each target briefly, then release before the next target";
         MessageBox.Show(this,
             "Chạm và GIỮ nhẹ từng dấu + khoảng 0,1 giây rồi nhả tay hoàn toàn.\n\nThứ tự: trên-trái → trên-phải → dưới-phải → dưới-trái.\n\nMỗi điểm chỉ chuyển tiếp sau khi bạn nhả tay.",
-            "Touch Calibration 2.4",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            "Touch Calibration",MessageBoxButtons.OK,MessageBoxIcon.Information);
     }
 
     async Task ResetTouchCalibration() {
