@@ -67,12 +67,12 @@ public static class MediaCodec {
 
     public static byte[] FromNativeScript(IEnumerable<Step> sourceSteps) {
         var steps=sourceSteps?.ToList()??throw new ArgumentNullException(nameof(sourceSteps));
-        if(steps.Count is <1 or >32)throw new FormatException("HID script cần 1..32 action.");
+        if(steps.Count is <1 or >512)throw new FormatException("HID script cần 1..512 action.");
 
         using var stream=new MemoryStream();
         using var writer=new BinaryWriter(stream);
-        writer.Write(new byte[]{(byte)'P',(byte)'X',(byte)'S',(byte)'1'});
-        writer.Write((byte)steps.Count);
+        writer.Write(new byte[]{(byte)'P',(byte)'X',(byte)'S',(byte)'2'});
+        writer.Write((ushort)steps.Count);
 
         foreach(var step in steps) {
             string type=step.Type;
@@ -141,7 +141,7 @@ public static class MediaCodec {
         }
 
         byte[] data=stream.ToArray();
-        if(data.Length>2048)throw new FormatException("HID script vượt 2048 byte.");
+        if(data.Length>8192)throw new FormatException("HID script vượt 8192 byte.");
         return data;
     }
 
