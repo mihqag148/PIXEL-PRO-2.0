@@ -742,7 +742,7 @@ public sealed class StudioForm : Form {
             monitorSending=true;
             try{await SendMonitorFrame();}
             catch(Exception ex){
-                monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="PC Monitor: error";
+                monitorInfo.Text="PC Monitor: retrying";
                 Log("MONITOR: "+ex.Message);
             } finally {monitorSending=false;}
         };
@@ -1461,42 +1461,77 @@ public sealed class StudioForm : Form {
     async Task ToggleMonitor()=>await SetMonitorEnabled(!monitorEnabled);
 
     async Task SetMonitorEnabled(bool enabled) {
-        NeedDevice();
         monitorEnabled=enabled;
+        settings.PcMonitorPlugin=enabled;
+        if(enabled)settings.MusicPlugin=false;
+        settings.Save();
         loading=true;monitorPluginToggle.Checked=enabled;loading=false;
+
         if(enabled) {
             if(musicEnabled)await SetMusicEnabled(false);
-            await SendMonitorFrame();
+            if(!pluginHost.Running) {
+                pluginHost.Start();
+                settings.NamedPipeService=true;
+                loading=true;namedPipeServiceToggle.Checked=true;loading=false;
+                settings.Save();
+            }
+            pluginProcesses.Start("PixelPro2.PcMonitorPlugin.exe");
+            monitorInfo.Text="PC Monitor: starting plugin…";
+            await pluginHost.WaitForMonitor(TimeSpan.FromSeconds(3));
+            if(device.Connected)await SendMonitorFrame();
             monitorTimer.Start();
         } else {
             monitorTimer.Stop();
-            await device.Request("MONITOR|OFF");
+            pluginProcesses.Stop("PixelPro2.PcMonitorPlugin.exe");
+            pluginHost.ClearMonitor();
+            if(device.Connected)await device.Request("MONITOR|OFF");
             monitorInfo.Text="PC Monitor: OFF";
         }
         UpdatePluginStatus();
     }
 
     async Task SendMonitorFrame() {
-        var s=monitorCollector.Read();
-        await device.Request($"MONITOR|SET|{s.CpuPercent}|{s.GpuPercent}|{s.RamPercent}|{s.DiskPercent}|{s.NetKbps}|{s.CpuTempC}|{s.GpuTempC}");
+        var snapshot=pluginHost.Monitor;
+        if(!snapshot.HasValue) {
+            monitorInfo.Text="PC Monitor: enabled · waiting for plugin";
+            UpdatePluginStatus();
+            return;
+        }
+        var s=snapshot.Value;
+        if(device.Connected)
+            await device.Request($"MONITOR|SET|{s.CpuPercent}|{s.GpuPercent}|{s.RamPercent}|{s.DiskPercent}|{s.NetKbps}|{s.CpuTempC}|{s.GpuTempC}");
         monitorInfo.Text=$"PC Monitor: CPU {s.CpuPercent}% · GPU {s.GpuPercent}% · RAM {s.RamPercent}%";
         UpdatePluginStatus();
     }
 
     async Task SetMusicEnabled(bool enabled) {
-        NeedDevice();
         musicEnabled=enabled;
+        settings.MusicPlugin=enabled;
+        if(enabled)settings.PcMonitorPlugin=false;
+        settings.Save();
         loading=true;musicPluginToggle.Checked=enabled;loading=false;
+
         if(enabled) {
             if(monitorEnabled)await SetMonitorEnabled(false);
-            musicPlugin.Reset();
+            if(!pluginHost.Running) {
+                pluginHost.Start();
+                settings.NamedPipeService=true;
+                loading=true;namedPipeServiceToggle.Checked=true;loading=false;
+                settings.Save();
+            }
+            pluginProcesses.Start("PixelPro2.MusicPlugin.exe");
+            pluginHost.ClearMusic();
             lastMusicPayload="";
-            await SendMusicFrame();
+            musicInfo.Text="Music Player: starting plugin…";
+            await pluginHost.WaitForMusic(TimeSpan.FromSeconds(3));
+            if(device.Connected)await SendMusicFrame();
             musicTimer.Start();
         } else {
             musicTimer.Stop();
+            pluginProcesses.Stop("PixelPro2.MusicPlugin.exe");
+            pluginHost.ClearMusic();
             lastMusicPayload="";
-            await device.Request("MUSIC|OFF");
+            if(device.Connected)await device.Request("MUSIC|OFF");
             musicInfo.Text="Music Player: OFF";
         }
         UpdatePluginStatus();
@@ -1513,9 +1548,9 @@ public sealed class StudioForm : Form {
     }
 
     async Task SendMusicFrame() {
-        var snapshot=await musicPlugin.Read();
-        if(snapshot is null) {
-            if(lastMusicPayload!="OFF") {
+        var snapshot=pluginHost.Music;
+        if(!snapshot.HasValue||string.IsNullOrWhiteSpace(snapshot.Value.Title)) {
+            if(device.Connected&&lastMusicPayload!="OFF") {
                 await device.Request("MUSIC|OFF");
                 lastMusicPayload="OFF";
             }
@@ -1527,7 +1562,7 @@ public sealed class StudioForm : Form {
         string title=CleanMusicField(snapshot.Value.Title);
         string artist=CleanMusicField(snapshot.Value.Artist);
         string payload=$"{(snapshot.Value.Playing?1:0)}|{title}|{artist}";
-        if(payload!=lastMusicPayload) {
+        if(device.Connected&&payload!=lastMusicPayload) {
             await device.Request("MUSIC|SET|"+payload);
             lastMusicPayload=payload;
         }
@@ -1536,9 +1571,12 @@ public sealed class StudioForm : Form {
     }
 
     void UpdatePluginStatus() {
+        string pipe=pluginHost.Running?"Pipe ON":"Pipe OFF";
         string pc=monitorEnabled?"PC Monitor ON":"PC Monitor OFF";
         string music=musicEnabled?"Music ON":"Music OFF";
-        pluginStatus.Text=$"Plugins: {pc} · {music}";
+        string connected=string.Join(", ",pluginHost.ConnectedPlugins);
+        pluginStatus.Text=$"Plugins: {pipe} · {pc} · {music}"+
+            (connected.Length>0?$" · connected: {connected}":"");
     }
 
     async Task RunDeviceStep(Step step) {
