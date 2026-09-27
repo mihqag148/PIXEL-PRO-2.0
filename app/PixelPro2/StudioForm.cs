@@ -25,9 +25,10 @@ public sealed class StudioForm : Form {
         new("Mouse Click","MouseClick","LEFT","HID capable: LEFT / RIGHT / MIDDLE / DOUBLELEFT.",true),
         new("Mouse Wheel","Wheel","1","HID capable: -127..127 for native mode.",true),
         new("Media Control","Media","PLAYPAUSE","HID: VOLUP/VOLDOWN/MUTE/PLAYPAUSE/NEXT/PREV/STOP.",true),
-        new("Change Profile","ChangeProfile","1","HID capable. Profile 1..5.",true),
+        new("Change Profile","ChangeProfile","1",$"HID capable. Profile 1..{DeviceLimits.Profiles}.",true),
         new("Functional Key","FunctionalKey","F1","HID capable. Example: HOME, PAGEUP, F1.",true),
-        new("Device Control","DeviceCtrl","PROFILE_NEXT","HID: PROFILE_NEXT/PROFILE_PREV. MONITOR_TOGGLE needs Studio.",true)
+        new("Device Control","DeviceCtrl","PROFILE_NEXT","HID: PROFILE_NEXT/PROFILE_PREV. MONITOR_TOGGLE needs Studio.",true),
+        new("Power Off Computer","PowerOff","","Windows host action. Requires Studio.",false)
     ];
 
     readonly Device device=new();
@@ -43,7 +44,7 @@ public sealed class StudioForm : Form {
     readonly ListBox deviceList=new(){Dock=DockStyle.Fill,IntegralHeight=false};
     readonly ListBox toolbox=new(){Dock=DockStyle.Fill,IntegralHeight=false};
     readonly ListBox sequence=new(){Dock=DockStyle.Fill,IntegralHeight=false,AllowDrop=true};
-    readonly Button[] profileButtons=new Button[5];
+    readonly Button[] profileButtons=new Button[DeviceLimits.Profiles];
     readonly Button[] keyButtons=new Button[8];
 
     readonly TextBox alias=new(){Width=230,MaxLength=12};
@@ -76,12 +77,12 @@ public sealed class StudioForm : Form {
 
     readonly string localPath=Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "PixelPro2","preset-v3.json");
+        "PixelPro2","preset-v4.json");
 
     public StudioForm() {
-        Text="PIXEL PRO 2.0 · Studio 2.3.1";
-        MinimumSize=new Size(1180,760);
-        Size=new Size(1360,860);
+        Text="PIXEL PRO 2.0 · Studio 2.4";
+        MinimumSize=new Size(1180,860);
+        Size=new Size(1360,940);
         StartPosition=FormStartPosition.CenterScreen;
         Font=new Font("Segoe UI",10);
         BackColor=Color.FromArgb(245,246,248);
@@ -151,6 +152,8 @@ public sealed class StudioForm : Form {
         };
         tools.Controls.Add(MakeButton("Import",ImportPreset));
         tools.Controls.Add(MakeButton("Export",ExportPreset));
+        tools.Controls.Add(MakeButton("Import Profile",ImportProfile));
+        tools.Controls.Add(MakeButton("Export Profile",ExportProfile));
         tools.Controls.Add(MakeButton("Firmware",OpenFirmwarePage));
         tools.Controls.Add(MakeButton("Light / Dark",()=>{dark=!dark;ApplyTheme(dark);return Task.CompletedTask;}));
         panel.Controls.Add(tools);
@@ -159,18 +162,19 @@ public sealed class StudioForm : Form {
 
     Control BuildLeftPane() {
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,445));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,570));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
 
-        var keysBox=new GroupBox{Text="Profile & Key Selection",Dock=DockStyle.Fill,Padding=new Padding(10)};
+        var keysBox=new GroupBox{Text=$"Profile & Key Selection · {DeviceLimits.Profiles} profiles",Dock=DockStyle.Fill,Padding=new Padding(10)};
         var keysLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1};
-        keysLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+        keysLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,175));
         keysLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         keysLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
 
-        var profiles=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=1};
-        for(int i=0;i<5;i++) {
-            profiles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        var profiles=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=5,Padding=new Padding(2)};
+        for(int col=0;col<5;col++)profiles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
+        for(int row=0;row<5;row++)profiles.RowStyles.Add(new RowStyle(SizeType.Percent,20));
+        for(int i=0;i<DeviceLimits.Profiles;i++) {
             int p=i;
             var b=new Button{
                 Text=(i+1).ToString(),Dock=DockStyle.Fill,Margin=new Padding(3),
@@ -197,7 +201,7 @@ public sealed class StudioForm : Form {
                 if(e.Data?.GetData(typeof(ProfileDrag)) is ProfileDrag src&&src.Profile!=p)CopyProfile(src.Profile,p);
             };
             profileButtons[i]=b;
-            profiles.Controls.Add(b,i,0);
+            profiles.Controls.Add(b,i%5,i/5);
         }
         keysLayout.Controls.Add(profiles,0,0);
 
@@ -420,7 +424,7 @@ public sealed class StudioForm : Form {
     Control BuildAutoProfile() {
         autoGrid.Columns.Add(new DataGridViewCheckBoxColumn{Name="Enabled",HeaderText="On",FillWeight=15});
         autoGrid.Columns.Add(new DataGridViewTextBoxColumn{Name="Process",HeaderText="Process / app",FillWeight=55});
-        autoGrid.Columns.Add(new DataGridViewTextBoxColumn{Name="Profile",HeaderText="Profile (1..5)",FillWeight=30});
+        autoGrid.Columns.Add(new DataGridViewTextBoxColumn{Name="Profile",HeaderText=$"Profile (1..{DeviceLimits.Profiles})",FillWeight=30});
 
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,ColumnCount=1};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
@@ -688,7 +692,7 @@ public sealed class StudioForm : Form {
             if(v==0)return false;
             b.Type="M";b.Code=v>0?5:6;b.Modifiers=0;return true;
         }
-        if(s.Type=="ChangeProfile"&&int.TryParse(s.Value,out int p)&&p is >=1 and <=5) {
+        if(s.Type=="ChangeProfile"&&int.TryParse(s.Value,out int p)&&p is >=1 and <=DeviceLimits.Profiles) {
             b.Type="P";b.Code=p-1;b.Modifiers=0;return true;
         }
         return false;
@@ -728,7 +732,7 @@ public sealed class StudioForm : Form {
     }
 
     void RefreshTiles() {
-        for(int k=0;k<8;k++) {
+        for(int k=0;k<DeviceLimits.Keys;k++) {
             var b=preset.Profiles[currentProfile][k];
             string mode=b.Type=="H"?"APP":b.Type=="D"?"OFF":"HID";
             keyButtons[k].Text=$"K{k+1}\n{b.Label}\n[{mode}]";
@@ -739,7 +743,7 @@ public sealed class StudioForm : Form {
     }
 
     void RefreshProfileButtons() {
-        for(int p=0;p<5;p++) {
+        for(int p=0;p<DeviceLimits.Profiles;p++) {
             profileButtons[p].Text=(p==activeProfile?"▶ ":"")+(p+1);
             profileButtons[p].BackColor=p==currentProfile?Color.FromArgb(40,120,210):dark?Color.FromArgb(50,53,60):Color.White;
             profileButtons[p].ForeColor=p==currentProfile?Color.White:dark?Color.White:Color.Black;
@@ -819,7 +823,7 @@ public sealed class StudioForm : Form {
             next.Profiles[p][k]=b;
         }
         var state=(await device.Request("STATE")).Split('|');
-        if(state.Length<2||!int.TryParse(state[0],out int active)||active is <0 or >4||
+        if(state.Length<2||!int.TryParse(state[0],out int active)||active is <0 or >=DeviceLimits.Profiles||
            !int.TryParse(state[1],out int light)||light is <0 or >80)
             throw new IOException("Invalid STATE.");
         preset=next;activeProfile=currentProfile=active;currentKey=0;
@@ -830,7 +834,7 @@ public sealed class StudioForm : Form {
             screenOff.SelectedIndex=off switch {30=>1,300=>2,900=>3,_=>0};
         LoadEditor();LoadRulesGrid();SaveLocal();
         await RefreshMediaInfo();
-        status.Text="Read 5 profiles from device";
+        status.Text=$"Read {DeviceLimits.Profiles} profiles from device";
     }
 
     async Task UploadBinding(int p,int k,IProgress<int>? progress=null) {
@@ -857,7 +861,7 @@ public sealed class StudioForm : Form {
         for(int k=0;k<8;k++) {
             int key=k;
             await UploadBinding(currentProfile,k,new Progress<int>(v=>
-                transfer.Value=Math.Clamp((key*100+v)/(8),0,100)));
+                transfer.Value=Math.Clamp((key*100+v)/DeviceLimits.Keys,0,100)));
         }
         await device.Request("SAVE");
         transfer.Value=100;
@@ -1037,7 +1041,7 @@ public sealed class StudioForm : Form {
             if(v=="MONITOR_TOGGLE"){await ToggleMonitor();return;}
             int delta=v=="PROFILE_NEXT"?1:v=="PROFILE_PREV"?-1:0;
             if(delta!=0) {
-                int p=(activeProfile+delta+5)%5;
+                int p=(activeProfile+delta+DeviceLimits.Profiles)%DeviceLimits.Profiles;
                 await device.Request($"PROFILE|{p}");activeProfile=p;RefreshProfileButtons();
             }
         }
@@ -1046,14 +1050,14 @@ public sealed class StudioForm : Form {
     async void HandleEvent(string text) {
         var t=text.Split('|');
         if(t.Length==4&&t[1]=="HOST"&&armed.Checked&&!busy&&
-           int.TryParse(t[2],out int p)&&p is >=0 and <5&&
-           int.TryParse(t[3],out int k)&&k is >=0 and <8) {
+           int.TryParse(t[2],out int p)&&p is >=0 and <DeviceLimits.Profiles&&
+           int.TryParse(t[3],out int k)&&k is >=0 and <DeviceLimits.Keys) {
             var binding=preset.Profiles[p][k];
             if(binding.Type!="H")return;
             try{await runner.Run(binding,shutdown.Token,RunDeviceStep);}
             catch(OperationCanceledException){}
             catch(Exception ex){Log("MACRO: "+ex.Message);}
-        } else if(t.Length>=3&&t[1]=="PROFILE"&&int.TryParse(t[2],out int profile)&&profile is >=0 and <5) {
+        } else if(t.Length>=3&&t[1]=="PROFILE"&&int.TryParse(t[2],out int profile)&&profile is >=0 and <DeviceLimits.Profiles) {
             activeProfile=profile;RefreshProfileButtons();
         } else if(t.Length>=2&&t[1]=="CALDONE") {
             touchInfo.Text="Touch calibration: AFFINE saved";
@@ -1099,8 +1103,8 @@ public sealed class StudioForm : Form {
             if(string.IsNullOrWhiteSpace(process))continue;
             if(process.EndsWith(".exe",StringComparison.OrdinalIgnoreCase))process=process[..^4];
             bool enabled=Convert.ToBoolean(row.Cells["Enabled"].Value??true);
-            if(!int.TryParse(Convert.ToString(row.Cells["Profile"].Value),out int profile)||profile is <1 or >5)
-                throw new FormatException($"Auto profile for {process}: profile must be 1..5.");
+            if(!int.TryParse(Convert.ToString(row.Cells["Profile"].Value),out int profile)||profile is <1 or >DeviceLimits.Profiles)
+                throw new FormatException($"Auto profile for {process}: profile must be 1..{DeviceLimits.Profiles}.");
             rules.Add(new AutoProfileRule{Process=process,Profile=profile-1,Enabled=enabled});
         }
         preset.AutoProfiles=rules;preset.AutoProfileEnabled=autoProfileEnabled.Checked;
