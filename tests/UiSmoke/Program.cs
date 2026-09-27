@@ -2,7 +2,7 @@ using PixelPro2;
 static class Program {
     [STAThread] static void Main(string[] args) {
         ApplicationConfiguration.Initialize();
-        using var form=new MainForm();
+        using var form=new StudioForm();
         form.ShowInTaskbar=false;form.Opacity=0;
         form.StartPosition=FormStartPosition.Manual;form.Location=new Point(-32000,-32000);
         form.Show();Application.DoEvents();form.PerformLayout();
