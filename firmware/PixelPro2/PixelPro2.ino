@@ -72,10 +72,9 @@ uint16_t mediaW=0,mediaH=0,mediaFrames=0,mediaDelay=100,mediaIndex=0;
 bool mediaActive=false;
 uint32_t mediaNext=0;
 
-// Native HID script (PXS1), loaded on demand from SPIFFS.
-uint8_t scriptData[2048]{};
-uint16_t scriptSize=0,scriptPos=0;
-uint8_t scriptSteps=0;
+// Native HID script (PXS2), loaded on demand from SPIFFS.
+uint8_t scriptData[8192]{};
+uint16_t scriptSize=0,scriptPos=0,scriptSteps=0;
 bool scriptActive=false;
 uint32_t scriptResumeAt=0;
 
@@ -152,11 +151,11 @@ bool validMediaCode(uint16_t code) {
 }
 
 bool validateScriptBytes(const uint8_t* d,size_t n) {
-  if(!d||n<6||n>sizeof(scriptData)||memcmp(d,"PXS1",4)!=0)return false;
-  uint8_t steps=d[4];
-  if(!steps||steps>32)return false;
-  size_t p=5;
-  for(uint8_t s=0;s<steps;s++) {
+  if(!d||n<7||n>sizeof(scriptData)||memcmp(d,"PXS2",4)!=0)return false;
+  uint16_t steps=uint16_t(d[4]|(uint16_t(d[5])<<8));
+  if(!steps||steps>512)return false;
+  size_t p=6;
+  for(uint16_t s=0;s<steps;s++) {
     if(p>=n)return false;
     uint8_t type=d[p++];
     if(type==1) {
@@ -202,7 +201,7 @@ bool readScriptFile(uint8_t p,uint8_t k) {
   char path[16];
   snprintf(path,sizeof(path),"/s%u%u.pxs",unsigned(p),unsigned(k));
   File file=SPIFFS.open(path,FILE_READ);
-  if(!file||file.size()>sizeof(scriptData)||file.size()<6){if(file)file.close();return false;}
+  if(!file||file.size()>sizeof(scriptData)||file.size()<7){if(file)file.close();return false;}
   scriptSize=file.size();
   bool ok=file.read(scriptData,scriptSize)==scriptSize;
   file.close();
@@ -211,8 +210,8 @@ bool readScriptFile(uint8_t p,uint8_t k) {
 
 void startScript(uint8_t p,uint8_t k) {
   if(!readScriptFile(p,k)){emit("E|SCRIPTERR|MISSING");return;}
-  scriptPos=5;
-  scriptSteps=scriptData[4];
+  scriptPos=6;
+  scriptSteps=uint16_t(scriptData[4]|(uint16_t(scriptData[5])<<8));
   scriptActive=true;
   scriptResumeAt=0;
 }
@@ -854,8 +853,8 @@ void request(char* line) {
   }
   if(cmd=="SCRIPT"&&n==7&&strcmp(tokens[2],"BEGIN")==0&&
      Pixel::number(tokens[3],4,p)&&Pixel::number(tokens[4],7,k)&&
-     Pixel::number(tokens[5],2048,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
-    if(!ensureFlash(true)||v<6){error("SCRIPT");return;}
+     Pixel::number(tokens[5],8192,v)&&Pixel::number(tokens[6],0xFFFFFFFFUL,m)) {
+    if(!ensureFlash(true)||v<7){error("SCRIPT");return;}
     stopSaver();
     if(upload.file)upload.file.close();
     SPIFFS.remove("/upload.tmp");
