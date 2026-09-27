@@ -40,8 +40,8 @@ public sealed class StudioForm : Form {
     readonly DeviceHub device=new();
     readonly MacroRunner runner=new();
     readonly CancellationTokenSource shutdown=new();
-    readonly SystemMonitorCollector monitorCollector=new();
-    readonly MusicPlugin musicPlugin=new();
+    readonly NamedPipePluginHost pluginHost=new();
+    readonly PluginProcessManager pluginProcesses=new();
     readonly StudioSettings settings=StudioSettings.Load();
 
     Preset preset=new();
@@ -71,6 +71,7 @@ public sealed class StudioForm : Form {
     readonly CheckBox hidMode=new(){Text="HID Mode · runs without Studio",AutoSize=true,Checked=true};
     readonly CheckBox armed=new(){Text="Allow App-mode actions on this PC",AutoSize=true,Checked=true};
     readonly CheckBox autoProfileEnabled=new(){Text="Enable dynamic profile switching",AutoSize=true};
+    readonly CheckBox namedPipeServiceToggle=new(){Text="Enable Named Pipe Service",AutoSize=true};
     readonly CheckBox monitorPluginToggle=new(){Text="PC Monitoring Plugin",AutoSize=true};
     readonly CheckBox musicPluginToggle=new(){Text="Music Player Plugin (SMTC)",AutoSize=true};
 
@@ -172,10 +173,12 @@ public sealed class StudioForm : Form {
         }
         loading=true;
         language.SelectedIndex=languageCode=="vi"?1:languageCode=="zh"?2:0;
+        namedPipeServiceToggle.Checked=settings.NamedPipeService;
         monitorPluginToggle.Checked=settings.PcMonitorPlugin;
         musicPluginToggle.Checked=settings.MusicPlugin;
         loading=false;
         ApplyLanguage();
+        if(settings.NamedPipeService)pluginHost.Start();
         autoProfileTimer.Start();
         ApplyTheme(settings.DarkTheme);
         UpdatePluginStatus();
@@ -492,8 +495,9 @@ public sealed class StudioForm : Form {
     };
 
     Control BuildPlugins() {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=5,ColumnCount=1,Padding=new Padding(14)};
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=6,ColumnCount=1,Padding=new Padding(14)};
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,92));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,110));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,110));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,96));
@@ -505,6 +509,16 @@ public sealed class StudioForm : Form {
             Padding=new Padding(2,8,2,4)
         },0,0);
 
+        var pipeBox=new GroupBox{Text="Plugin Service",Dock=DockStyle.Fill,Padding=new Padding(12)};
+        var pipeFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
+        pipeFlow.Controls.Add(namedPipeServiceToggle);
+        pipeFlow.Controls.Add(new Label{
+            AutoSize=true,ForeColor=Color.DimGray,
+            Text="Named pipe: PIXEL_PRO_2_PLUGINS · accepts built-in and third-party plugin telemetry."
+        });
+        pipeBox.Controls.Add(pipeFlow);
+        root.Controls.Add(pipeBox,0,1);
+
         var pcBox=new GroupBox{Text="PC Monitoring",Dock=DockStyle.Fill,Padding=new Padding(12)};
         var pcFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
         pcFlow.Controls.Add(monitorPluginToggle);
@@ -514,7 +528,7 @@ public sealed class StudioForm : Form {
             Text="CPU / GPU / RAM / Disk / Network telemetry is rendered full-screen on PIXEL PRO."
         });
         pcBox.Controls.Add(pcFlow);
-        root.Controls.Add(pcBox,0,1);
+        root.Controls.Add(pcBox,0,2);
 
         var musicBox=new GroupBox{Text="Music Player",Dock=DockStyle.Fill,Padding=new Padding(12)};
         var musicFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
@@ -525,7 +539,7 @@ public sealed class StudioForm : Form {
             Text="Uses Windows SMTC: Spotify, Apple Music, browsers, VLC and other compatible players."
         });
         musicBox.Controls.Add(musicFlow);
-        root.Controls.Add(musicBox,0,2);
+        root.Controls.Add(musicBox,0,3);
 
         var safeBox=new GroupBox{Text="Safe Mode",Dock=DockStyle.Fill,Padding=new Padding(12)};
         var safeFlow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};
@@ -536,12 +550,12 @@ public sealed class StudioForm : Form {
             Text="Always ON on PIXEL PRO 2.0: firmware exposes HID + CDC only, never USB mass storage."
         });
         safeBox.Controls.Add(safeFlow);
-        root.Controls.Add(safeBox,0,3);
+        root.Controls.Add(safeBox,0,4);
 
         root.Controls.Add(new Label{
             Dock=DockStyle.Fill,AutoSize=false,ForeColor=Color.DimGray,
             Text="Plugin status is also shown in the bottom bar. Enabling one display plugin replaces the other full-screen plugin on the active device; HID keys continue working."
-        },0,4);
+        },0,5);
         return root;
     }
 
@@ -667,18 +681,32 @@ public sealed class StudioForm : Form {
             preset.AutoProfileEnabled=autoProfileEnabled.Checked;
             SaveLocalQuiet();
         };
+        namedPipeServiceToggle.CheckedChanged+=(_,_)=>{
+            if(loading)return;
+            Guard(async()=>{
+                settings.NamedPipeService=namedPipeServiceToggle.Checked;
+                settings.Save();
+                if(namedPipeServiceToggle.Checked)pluginHost.Start();
+                else {
+                    if(monitorEnabled)await SetMonitorEnabled(false);
+                    if(musicEnabled)await SetMusicEnabled(false);
+                    pluginHost.Stop();
+                }
+                UpdatePluginStatus();
+            });
+        };
+        pluginHost.ConnectionChanged+=(name,connected)=>OnUi(()=>{
+            Log($"PLUGIN {name}: {(connected?"connected":"disconnected")}");
+            UpdatePluginStatus();
+        });
+        pluginHost.Updated+=()=>OnUi(UpdatePluginStatus);
+
         monitorPluginToggle.CheckedChanged+=(_,_)=>{
             if(loading)return;
-            settings.PcMonitorPlugin=monitorPluginToggle.Checked;
-            if(monitorPluginToggle.Checked)settings.MusicPlugin=false;
-            settings.Save();
             Guard(()=>SetMonitorEnabled(monitorPluginToggle.Checked));
         };
         musicPluginToggle.CheckedChanged+=(_,_)=>{
             if(loading)return;
-            settings.MusicPlugin=musicPluginToggle.Checked;
-            if(musicPluginToggle.Checked)settings.PcMonitorPlugin=false;
-            settings.Save();
             Guard(()=>SetMusicEnabled(musicPluginToggle.Checked));
         };
         language.SelectedIndexChanged+=(_,_)=>{
@@ -692,11 +720,10 @@ public sealed class StudioForm : Form {
 
         device.Event+=e=>OnUi(()=>HandleEvent(e));
         device.Disconnected+=e=>OnUi(()=>{
-            monitorEnabled=false;monitorTimer.Stop();monitorInfo.Text="PC Monitor: OFF";
-            musicEnabled=false;musicTimer.Stop();musicInfo.Text="Music Player: OFF";
-            loading=true;monitorPluginToggle.Checked=false;musicPluginToggle.Checked=false;loading=false;
-            UpdatePluginStatus();
             status.Text="Disconnected";
+            monitorInfo.Text=monitorEnabled?"PC Monitor: enabled · waiting for device":"PC Monitor: OFF";
+            musicInfo.Text=musicEnabled?"Music Player: enabled · waiting for device":"Music Player: OFF";
+            UpdatePluginStatus();
             Log(e);
             RefreshPorts();
         });
@@ -760,7 +787,7 @@ public sealed class StudioForm : Form {
             }
             monitorTimer.Stop();musicTimer.Stop();autoProfileTimer.Stop();
             monitorTimer.Dispose();musicTimer.Dispose();autoProfileTimer.Dispose();
-            monitorCollector.Dispose();musicPlugin.Dispose();
+            pluginProcesses.Dispose();pluginHost.Dispose();
             foreach(var image in iconPreviews.Values)image.Dispose();
             iconPreviews.Clear();
             shutdown.Cancel();device.Dispose();tray.Dispose();
