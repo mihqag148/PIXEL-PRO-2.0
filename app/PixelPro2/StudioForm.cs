@@ -47,7 +47,7 @@ public sealed class StudioForm : Form {
     Preset preset=new();
     int currentProfile,currentKey,activeProfile;
     int keyColor=1215;
-    bool loading,busy,monitorEnabled,monitorSending,musicEnabled,musicSending,autoSwitching,dark,touchDiagEnabled;
+    bool loading,busy,monitorEnabled,monitorSending,musicEnabled,musicSending,autoSwitching,dark,touchDiagEnabled,exitRequested;
     string lastMusicPayload="";
 
     readonly ListBox deviceList=new(){Dock=DockStyle.Fill,IntegralHeight=false};
@@ -729,13 +729,28 @@ public sealed class StudioForm : Form {
 
         autoProfileTimer.Tick+=async (_,_)=>await CheckAutoProfile();
 
+        Resize+=(_,_)=>{
+            if(WindowState!=FormWindowState.Minimized)return;
+            SaveLocalQuiet();
+            Hide();
+            tray.Visible=true;
+            tray.Text=device.Connected?$"PIXEL PRO 2.0 · {device.PortName}":"PIXEL PRO 2.0 · background";
+        };
         tray.DoubleClick+=(_,_)=>{Show();WindowState=FormWindowState.Normal;Activate();tray.Visible=false;};
         var trayMenu=new ContextMenuStrip();
-        trayMenu.Items.Add("Open Studio",null,(_,_)=>{Show();Activate();tray.Visible=false;});
-        trayMenu.Items.Add("Exit",null,(_,_)=>Close());
+        trayMenu.Items.Add("Open Studio",null,(_,_)=>{Show();WindowState=FormWindowState.Normal;Activate();tray.Visible=false;});
+        trayMenu.Items.Add("Exit",null,(_,_)=>{exitRequested=true;Close();});
         tray.ContextMenuStrip=trayMenu;
 
         FormClosing+=(_,e)=>{
+            if(!exitRequested&&e.CloseReason==CloseReason.UserClosing) {
+                e.Cancel=true;
+                SaveLocalQuiet();
+                Hide();
+                tray.Visible=true;
+                tray.Text=device.Connected?$"PIXEL PRO 2.0 · {device.PortName}":"PIXEL PRO 2.0 · background";
+                return;
+            }
             try{SaveEditor();SaveRulesGrid();SaveLocal();}
             catch(Exception ex) {
                 if(MessageBox.Show(ex.Message+"\nExit without saving?","PIXEL PRO",MessageBoxButtons.YesNo)!=DialogResult.Yes) {
