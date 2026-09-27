@@ -19,9 +19,9 @@ class SourceGuardTests(unittest.TestCase):
         self.assertIn('getUChar("orient2",0)',firmware)
         self.assertIn('return 0x68 ^',display)
         self.assertLess(panel.index('reg(0x28);delay(5);'),panel.index('reg(0x01);delay(15)'))
-        self.assertLess(panel.index('fillScreen(initialColor);'),panel.index('reg(0x29);delay(15)'))
-        self.assertIn('panel.begin(displayMode,0x0843);',firmware)
-        self.assertIn('initialPanelBackground',firmware)
+        self.assertLess(panel.index('fillScreen(0x0000);'),panel.index('reg(0x29);delay(15)'))
+        self.assertIn('panel.begin(displayMode);',firmware)
+        self.assertNotIn('initialPanelBackground',firmware)
 
     def test_touch_and_fast_boot_guards(self):
         firmware=(ROOT/'firmware/PixelPro2/PixelPro2.ino').read_text()
