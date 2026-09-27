@@ -2,7 +2,7 @@
 
 Firmware ESP32-S2 + Studio Windows cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B 480×320**. Repo này là nhánh độc lập; mọi build/release của dự án này chỉ thuộc **PIXEL-PRO-2.0**.
 
-## 2.1.0 — eezbotfun-style workflow adapted for PIXEL PRO hardware
+## 2.2.0 — eezbotfun-style workflow + full-screen PC monitor
 
 - Sửa kết nối COM native USB CDC: Studio assert DTR+RTS đúng yêu cầu của Arduino-ESP32, firmware tắt reboot theo line-state và Studio tự dò/retry cổng.
 - 8 phím × 5 profile, HID keyboard/media chạy độc lập không cần Studio; host action chạy khi Studio ở nền.
@@ -11,6 +11,7 @@ Firmware ESP32-S2 + Studio Windows cho bộ **LOLIN S2 Mini / MCUFRIEND HX8357-B
 - GIF screensaver: Studio chuyển GIF thành RGB332 160×106, giữ thời lượng hợp lý, truyền raw 512-byte có ACK/CRC, lưu SPIFFS và phát trực tiếp lên HX8357-B.
 - Icon tùy chỉnh từng phím: Studio chuyển ảnh về 48×48 RGB332, truyền có ACK/CRC, lưu flash và hiển thị trực tiếp trong tile.
 - RGB per-key, brightness, profile strip, SD detect, import/export preset, tray mode.
+- PC Monitoring Full Screen: Studio đọc CPU/GPU load + nhiệt độ qua LibreHardwareMonitor, RAM/disk/network qua Windows/.NET và cập nhật LCD mỗi giây; HID/phím vẫn hoạt động khi monitor đang hiển thị.
 - Pinout HX8357-B/i8080 và toàn bộ phần cứng hiện có được giữ nguyên.
 
 Kiến trúc và cách vận hành tham khảo dự án MIT [eezbotfun/8-key-macropad](https://github.com/eezbotfun/8-key-macropad), nhưng protocol và implementation của PIXEL PRO 2.0 được viết riêng cho ESP32-S2 + HX8357-B; không yêu cầu firmware nhị phân hay assets của eezbotfun.
@@ -49,5 +50,7 @@ dotnet run --project tests/AppTests/AppTests.csproj -c Release
 dotnet publish app/PixelPro2/PixelPro2.csproj -c Release -r win-x64 --self-contained true -o dist/studio
 g++ -std=c++17 -Wall -Wextra -Werror tests/model_test.cpp -o build/model-test
 ```
+
+LibreHardwareMonitor 0.9.6 được dùng cho telemetry CPU/GPU trên Windows; nếu sensor không khả dụng app tự fallback cho CPU/RAM/disk/network.
 
 CI chỉ tạo tag/release mới khi firmware thật và Studio đều build/test thành công. CI xanh xác nhận build phần mềm, không thay thế kiểm tra trực tiếp timing LCD/touch/USB trên thiết bị vật lý.
