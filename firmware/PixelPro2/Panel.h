@@ -45,7 +45,7 @@ public:
   void displayOff(){reg(0x28);}
   void displayOn(){reg(0x29);}
 
-  void begin(uint8_t mode) {
+  void begin(uint8_t mode,uint16_t initialColor=0x0000) {
     restore();
     // Keep the panel blank throughout init. HX8357-B only needs a short delay
     // after software reset and >=120 ms after Sleep Out.
@@ -53,7 +53,7 @@ public:
     reg(0xB0,{0,0});reg(0x01);delay(15);reg(0x28);
     reg(0x3A,{0x55});delay(1);reg(0x11);delay(120);
     orientation(mode);reg(0x21);
-    fillScreen(0x0000);
+    fillScreen(initialColor);
     reg(0x29);delay(15);setTextWrap(false);
   }
 
