@@ -46,7 +46,16 @@ public sealed class MacroRunner {
         }
     }
 
-    public async Task Run(Binding binding,CancellationToken token) {
+    static void Media(string value) {
+        ushort vk=value.Trim().ToUpperInvariant() switch {
+            "VOLUP"=>0xAF,"VOLDOWN"=>0xAE,"MUTE"=>0xAD,"PLAYPAUSE"=>0xB3,
+            "NEXT"=>0xB0,"PREV"=>0xB1,"STOP"=>0xB2,
+            _=>throw new FormatException("Media action không hợp lệ.")
+        };
+        SendKey(vk,0,0);SendKey(vk,0,2);
+    }
+
+    public async Task Run(Binding binding,CancellationToken token,Func<Step,Task>? deviceAction=null) {
         if(running) return;
         binding.Validate();
         running=true;
@@ -59,6 +68,10 @@ public sealed class MacroRunner {
                         await Task.Delay(int.Parse(step.Value),token);
                         break;
                     case "Open":
+                    case "Website":
+                    case "LaunchApp":
+                    case "OpenFolder":
+                    case "OpenFile":
                         Process.Start(new ProcessStartInfo(step.Value){UseShellExecute=true});
                         break;
                     case "Text":
@@ -98,6 +111,25 @@ public sealed class MacroRunner {
                         break;
                     case "Wheel":
                         SendMouse(0,0,unchecked((uint)MacroValue.Wheel(step.Value)),0x0800);
+                        break;
+                    case "Media":
+                        Media(step.Value);
+                        break;
+                    case "FunctionalKey": {
+                        var codes=Shortcut.Parse(step.Value);
+                        var pressed=new List<ushort>();
+                        try {
+                            foreach(var code in codes){SendKey(code,0,0);pressed.Add(code);}
+                            await Task.Delay(25,token);
+                        } finally {
+                            foreach(var code in pressed.AsEnumerable().Reverse()) SendKey(code,0,2);
+                        }
+                        break;
+                    }
+                    case "ChangeProfile":
+                    case "DeviceCtrl":
+                        if(deviceAction is null)throw new IOException("Action cần PIXEL PRO đang kết nối.");
+                        await deviceAction(step);
                         break;
                 }
             }
