@@ -1584,12 +1584,13 @@ public sealed class StudioForm : Form {
 
         string title=CleanMusicField(snapshot.Value.Title);
         string artist=CleanMusicField(snapshot.Value.Artist);
-        string payload=$"{(snapshot.Value.Playing?1:0)}|{title}|{artist}";
+        string album=CleanMusicField(snapshot.Value.Album);
+        string payload=$"{(snapshot.Value.Playing?1:0)}|{title}|{artist}|{album}";
         if(device.Connected&&payload!=lastMusicPayload) {
             await device.Request("MUSIC|SET|"+payload);
             lastMusicPayload=payload;
         }
-        musicInfo.Text=$"Music Player: {(snapshot.Value.Playing?"Playing":"Paused")} · {title} · {artist}";
+        musicInfo.Text=$"Music Player: {(snapshot.Value.Playing?"Playing":"Paused")} · {title} · {artist} · {album}";
         UpdatePluginStatus();
     }
 
