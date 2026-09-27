@@ -55,6 +55,7 @@ public sealed class Binding {
             "K" => Code is >=4 and <=115,
             "C" => Modifiers==0 && new[]{233,234,226,205,181,182,183}.Contains(Code),
             "M" => Modifiers==0 && Code is >=1 and <=6,
+            "S" => Code==0 && Modifiers==0,
             "P" => Modifiers==0 && Code is >=0 and <5,
             "H" or "D" => Code==0 && Modifiers==0,
             _ => false
@@ -179,6 +180,26 @@ public static class HidShortcut {
             if(usage==0)return false;
         }
         return usage!=0;
+    }
+
+    public static string Format(int usage,int modifiers) {
+        var parts=new List<string>();
+        if((modifiers&1)!=0)parts.Add("CTRL");
+        if((modifiers&2)!=0)parts.Add("SHIFT");
+        if((modifiers&4)!=0)parts.Add("ALT");
+        if((modifiers&8)!=0)parts.Add("WIN");
+        string key=usage switch {
+            >=4 and <=29 => ((char)('A'+usage-4)).ToString(),
+            >=30 and <=38 => (usage-29).ToString(),
+            39 => "0",
+            40 => "ENTER",41=>"ESC",42=>"BACKSPACE",43=>"TAB",44=>"SPACE",
+            73=>"INSERT",74=>"HOME",75=>"PAGEUP",76=>"DELETE",77=>"END",78=>"PAGEDOWN",
+            79=>"RIGHT",80=>"LEFT",81=>"DOWN",82=>"UP",
+            >=58 and <=69 => $"F{usage-57}",
+            _=>$"HID{usage}"
+        };
+        parts.Add(key);
+        return string.Join("+",parts);
     }
 }
 
